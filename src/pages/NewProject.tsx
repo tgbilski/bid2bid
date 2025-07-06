@@ -13,7 +13,6 @@ import VendorCard, { VendorData } from '@/components/VendorCard';
 const NewProject = () => {
   const [projectName, setProjectName] = useState('');
   const [vendors, setVendors] = useState<VendorData[]>([]);
-  const [projectId, setProjectId] = useState<string | null>(null);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -48,15 +47,23 @@ const NewProject = () => {
       vendorName: '',
       startDate: '',
       jobDuration: '',
-      totalCost: ''
+      totalCost: '',
+      isFavorite: false
     };
     setVendors([...vendors, newVendor]);
   };
 
-  const updateVendor = (id: string, field: keyof VendorData, value: string) => {
+  const updateVendor = (id: string, field: keyof VendorData, value: string | boolean) => {
     setVendors(vendors.map(vendor => 
       vendor.id === id ? { ...vendor, [field]: value } : vendor
     ));
+  };
+
+  const handleFavorite = (id: string) => {
+    setVendors(vendors.map(vendor => ({
+      ...vendor,
+      isFavorite: vendor.id === id ? !vendor.isFavorite : false
+    })));
   };
 
   const deleteVendor = (id: string) => {
@@ -107,8 +114,6 @@ const NewProject = () => {
         return;
       }
 
-      setProjectId(projectData.id);
-
       // Save vendors
       const vendorsToSave = vendors.filter(v => v.vendorName || v.startDate || v.jobDuration || v.totalCost);
       if (vendorsToSave.length > 0) {
@@ -117,7 +122,8 @@ const NewProject = () => {
           vendor_name: vendor.vendorName || 'Unnamed Vendor',
           start_date: vendor.startDate || null,
           job_duration: vendor.jobDuration || null,
-          total_cost: vendor.totalCost ? parseFloat(vendor.totalCost.replace(/[^0-9.]/g, '')) : null
+          total_cost: vendor.totalCost ? parseFloat(vendor.totalCost.replace(/[^0-9.]/g, '')) : null,
+          is_favorite: vendor.isFavorite || false
         }));
 
         const { error: vendorError } = await supabase
@@ -167,13 +173,6 @@ const NewProject = () => {
             />
           </div>
 
-          <Button
-            onClick={saveProject}
-            className="w-full bg-black text-white hover:bg-gray-800 rounded-[10px] h-12"
-          >
-            Save Project
-          </Button>
-
           <div className="space-y-4">
             <h2 className="text-lg font-semibold text-black">Vendor Information</h2>
             
@@ -183,6 +182,7 @@ const NewProject = () => {
                 vendor={vendor}
                 onUpdate={updateVendor}
                 onDelete={deleteVendor}
+                onFavorite={handleFavorite}
                 canDelete={vendors.length > 1}
               />
             ))}
@@ -197,6 +197,13 @@ const NewProject = () => {
                 Add Vendor Card
               </Button>
             )}
+
+            <Button
+              onClick={saveProject}
+              className="w-full bg-black text-white hover:bg-gray-800 rounded-[10px] h-12"
+            >
+              Save Project
+            </Button>
           </div>
         </div>
       </div>

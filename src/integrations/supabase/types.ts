@@ -37,6 +37,7 @@ export type Database = {
         Row: {
           created_at: string
           id: string
+          is_favorite: boolean | null
           job_duration: string | null
           project_id: string
           start_date: string | null
@@ -47,6 +48,7 @@ export type Database = {
         Insert: {
           created_at?: string
           id?: string
+          is_favorite?: boolean | null
           job_duration?: string | null
           project_id: string
           start_date?: string | null
@@ -57,6 +59,7 @@ export type Database = {
         Update: {
           created_at?: string
           id?: string
+          is_favorite?: boolean | null
           job_duration?: string | null
           project_id?: string
           start_date?: string | null

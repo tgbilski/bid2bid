@@ -5,7 +5,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Card, CardContent } from '@/components/ui/card';
-import { X } from 'lucide-react';
+import { X, Heart } from 'lucide-react';
 
 export interface VendorData {
   id: string;
@@ -13,21 +13,36 @@ export interface VendorData {
   startDate: string;
   jobDuration: string;
   totalCost: string;
+  isFavorite?: boolean;
 }
 
 interface VendorCardProps {
   vendor: VendorData;
-  onUpdate: (id: string, field: keyof VendorData, value: string) => void;
+  onUpdate: (id: string, field: keyof VendorData, value: string | boolean) => void;
   onDelete: (id: string) => void;
+  onFavorite: (id: string) => void;
   canDelete: boolean;
 }
 
-const VendorCard = ({ vendor, onUpdate, onDelete, canDelete }: VendorCardProps) => {
+const VendorCard = ({ vendor, onUpdate, onDelete, onFavorite, canDelete }: VendorCardProps) => {
   const formatCurrency = (value: string) => {
+    // Remove all non-numeric characters except decimal point
     const numericValue = value.replace(/[^0-9.]/g, '');
-    if (numericValue === '') return '';
+    
+    // Handle empty string
+    if (numericValue === '' || numericValue === '.') return '';
+    
+    // Parse the number
     const number = parseFloat(numericValue);
-    return isNaN(number) ? '' : `$${number.toFixed(2)}`;
+    if (isNaN(number)) return '';
+    
+    // Format to currency
+    return number.toLocaleString('en-US', {
+      style: 'currency',
+      currency: 'USD',
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2
+    });
   };
 
   const handleCostChange = (value: string) => {
@@ -35,21 +50,44 @@ const VendorCard = ({ vendor, onUpdate, onDelete, canDelete }: VendorCardProps) 
     onUpdate(vendor.id, 'totalCost', formatted);
   };
 
+  const handleCostBlur = () => {
+    // Ensure proper formatting on blur
+    if (vendor.totalCost && vendor.totalCost !== '$0.00') {
+      const formatted = formatCurrency(vendor.totalCost);
+      if (formatted !== vendor.totalCost) {
+        onUpdate(vendor.id, 'totalCost', formatted);
+      }
+    }
+  };
+
   return (
     <Card className="mb-4 relative">
       <CardContent className="p-4">
-        {canDelete && (
+        <div className="absolute top-2 right-2 flex gap-2">
           <Button
             variant="ghost"
             size="sm"
-            className="absolute top-2 right-2 h-8 w-8 p-0 text-gray-500 hover:text-red-500"
-            onClick={() => onDelete(vendor.id)}
+            className="h-8 w-8 p-0 text-gray-400 hover:text-red-500"
+            onClick={() => onFavorite(vendor.id)}
           >
-            <X size={16} />
+            <Heart 
+              size={16} 
+              className={vendor.isFavorite ? 'fill-red-500 text-red-500' : 'text-gray-400'} 
+            />
           </Button>
-        )}
+          {canDelete && (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-8 w-8 p-0 text-gray-500 hover:text-red-500"
+              onClick={() => onDelete(vendor.id)}
+            >
+              <X size={16} />
+            </Button>
+          )}
+        </div>
         
-        <div className="space-y-4">
+        <div className="space-y-4 pr-16">
           <div>
             <Label htmlFor={`vendor-name-${vendor.id}`} className="text-black">
               Vendor Name
@@ -107,6 +145,7 @@ const VendorCard = ({ vendor, onUpdate, onDelete, canDelete }: VendorCardProps) 
               id={`total-cost-${vendor.id}`}
               value={vendor.totalCost}
               onChange={(e) => handleCostChange(e.target.value)}
+              onBlur={handleCostBlur}
               placeholder="$0.00"
               className="mt-1"
             />

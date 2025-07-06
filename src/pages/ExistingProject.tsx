@@ -75,7 +75,8 @@ const ExistingProject = () => {
           vendorName: vendor.vendor_name,
           startDate: vendor.start_date || '',
           jobDuration: vendor.job_duration || '',
-          totalCost: vendor.total_cost ? `$${vendor.total_cost.toFixed(2)}` : ''
+          totalCost: vendor.total_cost ? `$${vendor.total_cost.toFixed(2)}` : '',
+          isFavorite: vendor.is_favorite || false
         }));
         setVendors(formattedVendors);
       } else {
@@ -109,15 +110,23 @@ const ExistingProject = () => {
       vendorName: '',
       startDate: '',
       jobDuration: '',
-      totalCost: ''
+      totalCost: '',
+      isFavorite: false
     };
     setVendors([...vendors, newVendor]);
   };
 
-  const updateVendor = (id: string, field: keyof VendorData, value: string) => {
+  const updateVendor = (id: string, field: keyof VendorData, value: string | boolean) => {
     setVendors(vendors.map(vendor => 
       vendor.id === id ? { ...vendor, [field]: value } : vendor
     ));
+  };
+
+  const handleFavorite = (id: string) => {
+    setVendors(vendors.map(vendor => ({
+      ...vendor,
+      isFavorite: vendor.id === id ? !vendor.isFavorite : false
+    })));
   };
 
   const deleteVendor = (id: string) => {
@@ -172,7 +181,8 @@ const ExistingProject = () => {
           vendor_name: vendor.vendorName || 'Unnamed Vendor',
           start_date: vendor.startDate || null,
           job_duration: vendor.jobDuration || null,
-          total_cost: vendor.totalCost ? parseFloat(vendor.totalCost.replace(/[^0-9.]/g, '')) : null
+          total_cost: vendor.totalCost ? parseFloat(vendor.totalCost.replace(/[^0-9.]/g, '')) : null,
+          is_favorite: vendor.isFavorite || false
         }));
 
         const { error: vendorError } = await supabase
@@ -240,13 +250,6 @@ const ExistingProject = () => {
             />
           </div>
 
-          <Button
-            onClick={saveProject}
-            className="w-full bg-black text-white hover:bg-gray-800 rounded-[10px] h-12"
-          >
-            Update Project
-          </Button>
-
           <div className="space-y-4">
             <h2 className="text-lg font-semibold text-black">Vendor Information</h2>
             
@@ -256,6 +259,7 @@ const ExistingProject = () => {
                 vendor={vendor}
                 onUpdate={updateVendor}
                 onDelete={deleteVendor}
+                onFavorite={handleFavorite}
                 canDelete={vendors.length > 1}
               />
             ))}
@@ -270,6 +274,13 @@ const ExistingProject = () => {
                 Add Vendor Card
               </Button>
             )}
+
+            <Button
+              onClick={saveProject}
+              className="w-full bg-black text-white hover:bg-gray-800 rounded-[10px] h-12"
+            >
+              Update Project
+            </Button>
           </div>
         </div>
       </div>
