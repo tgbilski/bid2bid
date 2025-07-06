@@ -7,12 +7,12 @@ interface LogoProps {
 const Logo = ({ className = "", onClick }: LogoProps) => {
   return (
     <div className={`flex justify-center ${className}`}>
-      <img 
-        src="/placeholder.svg" 
-        alt="Bid2Bid Logo" 
-        className="max-w-[200px] h-auto cursor-pointer"
+      <div 
+        className="max-w-[200px] h-auto cursor-pointer bg-gray-100 rounded-lg p-4 flex items-center justify-center"
         onClick={onClick}
-      />
+      >
+        <span className="text-2xl font-bold text-black">Bid2Bid</span>
+      </div>
     </div>
   );
 };

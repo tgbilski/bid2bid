@@ -6,30 +6,32 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Plus } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
+import { supabase } from '@/integrations/supabase/client';
 import Layout from '@/components/Layout';
 import VendorCard, { VendorData } from '@/components/VendorCard';
 
 const NewProject = () => {
   const [projectName, setProjectName] = useState('');
   const [vendors, setVendors] = useState<VendorData[]>([]);
+  const [projectId, setProjectId] = useState<string | null>(null);
   const navigate = useNavigate();
 
   useEffect(() => {
+    const checkAuth = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        navigate('/login');
+        return;
+      }
+    };
+
+    checkAuth();
+
     // Initialize with one empty vendor card
     if (vendors.length === 0) {
       addVendor();
     }
-  }, []);
-
-  useEffect(() => {
-    // Auto-save functionality
-    if (projectName.trim() || vendors.some(v => v.vendorName || v.startDate || v.jobDuration || v.totalCost)) {
-      const timeoutId = setTimeout(() => {
-        saveProject();
-      }, 1000);
-      return () => clearTimeout(timeoutId);
-    }
-  }, [projectName, vendors]);
+  }, [navigate]);
 
   const addVendor = () => {
     if (vendors.length >= 10) {
@@ -69,24 +71,7 @@ const NewProject = () => {
     setVendors(vendors.filter(vendor => vendor.id !== id));
   };
 
-  const saveProject = () => {
-    if (!projectName.trim()) return;
-
-    const project = {
-      id: Date.now().toString(),
-      name: projectName,
-      vendors: vendors,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString()
-    };
-
-    const existingProjects = JSON.parse(localStorage.getItem('bid2bid-projects') || '[]');
-    const updatedProjects = [...existingProjects, project];
-    localStorage.setItem('bid2bid-projects', JSON.stringify(updatedProjects));
-    localStorage.setItem(`bid2bid-project-${project.id}`, JSON.stringify(project));
-  };
-
-  const handleManualSave = () => {
+  const saveProject = async () => {
     if (!projectName.trim()) {
       toast({
         title: "Project Name Required",
@@ -96,12 +81,68 @@ const NewProject = () => {
       return;
     }
 
-    saveProject();
-    toast({
-      title: "Project Saved!",
-      description: "Your project has been saved successfully.",
-    });
-    navigate('/my-projects');
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        navigate('/login');
+        return;
+      }
+
+      // Save project
+      const { data: projectData, error: projectError } = await supabase
+        .from('projects')
+        .insert({
+          name: projectName,
+          user_id: session.user.id
+        })
+        .select()
+        .single();
+
+      if (projectError) {
+        toast({
+          title: "Error",
+          description: "Failed to save project",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      setProjectId(projectData.id);
+
+      // Save vendors
+      const vendorsToSave = vendors.filter(v => v.vendorName || v.startDate || v.jobDuration || v.totalCost);
+      if (vendorsToSave.length > 0) {
+        const vendorInserts = vendorsToSave.map(vendor => ({
+          project_id: projectData.id,
+          vendor_name: vendor.vendorName || 'Unnamed Vendor',
+          start_date: vendor.startDate || null,
+          job_duration: vendor.jobDuration || null,
+          total_cost: vendor.totalCost ? parseFloat(vendor.totalCost.replace(/[^0-9.]/g, '')) : null
+        }));
+
+        const { error: vendorError } = await supabase
+          .from('vendors')
+          .insert(vendorInserts);
+
+        if (vendorError) {
+          console.error('Error saving vendors:', vendorError);
+        }
+      }
+
+      toast({
+        title: "Project Saved!",
+        description: "Your project has been saved successfully.",
+      });
+      
+      navigate('/my-projects');
+    } catch (error) {
+      console.error('Error saving project:', error);
+      toast({
+        title: "Error",
+        description: "Failed to save project",
+        variant: "destructive",
+      });
+    }
   };
 
   return (
@@ -127,7 +168,7 @@ const NewProject = () => {
           </div>
 
           <Button
-            onClick={handleManualSave}
+            onClick={saveProject}
             className="w-full bg-black text-white hover:bg-gray-800 rounded-[10px] h-12"
           >
             Save Project

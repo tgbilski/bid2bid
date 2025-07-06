@@ -6,15 +6,15 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Plus } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
+import { supabase } from '@/integrations/supabase/client';
 import Layout from '@/components/Layout';
 import VendorCard, { VendorData } from '@/components/VendorCard';
 
 interface Project {
   id: string;
   name: string;
-  vendors: VendorData[];
-  createdAt: string;
-  updatedAt: string;
+  created_at: string;
+  updated_at: string;
 }
 
 const ExistingProject = () => {
@@ -23,34 +23,76 @@ const ExistingProject = () => {
   const [project, setProject] = useState<Project | null>(null);
   const [projectName, setProjectName] = useState('');
   const [vendors, setVendors] = useState<VendorData[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    // Load project from localStorage
-    const savedProject = localStorage.getItem(`bid2bid-project-${projectId}`);
-    if (savedProject) {
-      const projectData = JSON.parse(savedProject);
-      setProject(projectData);
-      setProjectName(projectData.name);
-      setVendors(projectData.vendors || []);
-    } else {
-      toast({
-        title: "Project Not Found",
-        description: "The requested project could not be found.",
-        variant: "destructive",
-      });
-      navigate('/my-projects');
-    }
+    const checkAuthAndLoadProject = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        navigate('/login');
+        return;
+      }
+      await loadProject();
+    };
+
+    checkAuthAndLoadProject();
   }, [projectId, navigate]);
 
-  useEffect(() => {
-    // Auto-save functionality
-    if (project && (projectName.trim() || vendors.some(v => v.vendorName || v.startDate || v.jobDuration || v.totalCost))) {
-      const timeoutId = setTimeout(() => {
-        saveProject();
-      }, 1000);
-      return () => clearTimeout(timeoutId);
+  const loadProject = async () => {
+    try {
+      // Load project
+      const { data: projectData, error: projectError } = await supabase
+        .from('projects')
+        .select('*')
+        .eq('id', projectId)
+        .single();
+
+      if (projectError || !projectData) {
+        toast({
+          title: "Project Not Found",
+          description: "The requested project could not be found.",
+          variant: "destructive",
+        });
+        navigate('/my-projects');
+        return;
+      }
+
+      setProject(projectData);
+      setProjectName(projectData.name);
+
+      // Load vendors
+      const { data: vendorData, error: vendorError } = await supabase
+        .from('vendors')
+        .select('*')
+        .eq('project_id', projectId)
+        .order('created_at');
+
+      if (vendorError) {
+        console.error('Error loading vendors:', vendorError);
+      } else if (vendorData && vendorData.length > 0) {
+        const formattedVendors = vendorData.map(vendor => ({
+          id: vendor.id,
+          vendorName: vendor.vendor_name,
+          startDate: vendor.start_date || '',
+          jobDuration: vendor.job_duration || '',
+          totalCost: vendor.total_cost ? `$${vendor.total_cost.toFixed(2)}` : ''
+        }));
+        setVendors(formattedVendors);
+      } else {
+        // If no vendors, add one empty card
+        addVendor();
+      }
+    } catch (error) {
+      console.error('Error loading project:', error);
+      toast({
+        title: "Error",
+        description: "Failed to load project",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoading(false);
     }
-  }, [projectName, vendors, project]);
+  };
 
   const addVendor = () => {
     if (vendors.length >= 10) {
@@ -90,29 +132,8 @@ const ExistingProject = () => {
     setVendors(vendors.filter(vendor => vendor.id !== id));
   };
 
-  const saveProject = () => {
-    if (!project || !projectName.trim()) return;
-
-    const updatedProject = {
-      ...project,
-      name: projectName,
-      vendors: vendors,
-      updatedAt: new Date().toISOString()
-    };
-
-    // Update individual project
-    localStorage.setItem(`bid2bid-project-${project.id}`, JSON.stringify(updatedProject));
-
-    // Update project list
-    const existingProjects = JSON.parse(localStorage.getItem('bid2bid-projects') || '[]');
-    const updatedProjects = existingProjects.map((p: Project) => 
-      p.id === project.id ? { ...p, name: projectName, updatedAt: updatedProject.updatedAt } : p
-    );
-    localStorage.setItem('bid2bid-projects', JSON.stringify(updatedProjects));
-  };
-
-  const handleManualSave = () => {
-    if (!projectName.trim()) {
+  const saveProject = async () => {
+    if (!project || !projectName.trim()) {
       toast({
         title: "Project Name Required",
         description: "Please enter a project name before saving.",
@@ -121,18 +142,77 @@ const ExistingProject = () => {
       return;
     }
 
-    saveProject();
-    toast({
-      title: "Project Updated!",
-      description: "Your project has been updated successfully.",
-    });
+    try {
+      // Update project name
+      const { error: projectError } = await supabase
+        .from('projects')
+        .update({ name: projectName })
+        .eq('id', project.id);
+
+      if (projectError) {
+        toast({
+          title: "Error",
+          description: "Failed to update project",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      // Delete existing vendors
+      await supabase
+        .from('vendors')
+        .delete()
+        .eq('project_id', project.id);
+
+      // Insert updated vendors
+      const vendorsToSave = vendors.filter(v => v.vendorName || v.startDate || v.jobDuration || v.totalCost);
+      if (vendorsToSave.length > 0) {
+        const vendorInserts = vendorsToSave.map(vendor => ({
+          project_id: project.id,
+          vendor_name: vendor.vendorName || 'Unnamed Vendor',
+          start_date: vendor.startDate || null,
+          job_duration: vendor.jobDuration || null,
+          total_cost: vendor.totalCost ? parseFloat(vendor.totalCost.replace(/[^0-9.]/g, '')) : null
+        }));
+
+        const { error: vendorError } = await supabase
+          .from('vendors')
+          .insert(vendorInserts);
+
+        if (vendorError) {
+          console.error('Error saving vendors:', vendorError);
+        }
+      }
+
+      toast({
+        title: "Project Updated!",
+        description: "Your project has been updated successfully.",
+      });
+    } catch (error) {
+      console.error('Error updating project:', error);
+      toast({
+        title: "Error",
+        description: "Failed to update project",
+        variant: "destructive",
+      });
+    }
   };
+
+  if (isLoading) {
+    return (
+      <Layout showLogoNavigation={true}>
+        <div className="max-w-md mx-auto mt-8 text-center">
+          <p className="text-gray-500">Loading project...</p>
+        </div>
+      </Layout>
+    );
+  }
 
   if (!project) {
     return (
       <Layout showLogoNavigation={true}>
         <div className="max-w-md mx-auto mt-8 text-center">
-          <p className="text-gray-500">Loading project...</p>
+          <p className="text-gray-500">Project not found</p>
         </div>
       </Layout>
     );
@@ -161,7 +241,7 @@ const ExistingProject = () => {
           </div>
 
           <Button
-            onClick={handleManualSave}
+            onClick={saveProject}
             className="w-full bg-black text-white hover:bg-gray-800 rounded-[10px] h-12"
           >
             Update Project

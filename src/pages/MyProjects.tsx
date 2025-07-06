@@ -2,29 +2,70 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
+import { supabase } from '@/integrations/supabase/client';
+import { toast } from '@/hooks/use-toast';
 import Layout from '@/components/Layout';
 
 interface Project {
   id: string;
   name: string;
-  createdAt: string;
+  created_at: string;
 }
 
 const MyProjects = () => {
   const [projects, setProjects] = useState<Project[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
   const navigate = useNavigate();
 
   useEffect(() => {
-    // Load projects from localStorage
-    const savedProjects = localStorage.getItem('bid2bid-projects');
-    if (savedProjects) {
-      setProjects(JSON.parse(savedProjects));
+    const checkAuthAndLoadProjects = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        navigate('/login');
+        return;
+      }
+      await loadProjects();
+    };
+
+    checkAuthAndLoadProjects();
+  }, [navigate]);
+
+  const loadProjects = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('projects')
+        .select('id, name, created_at')
+        .order('created_at', { ascending: false });
+
+      if (error) {
+        toast({
+          title: "Error",
+          description: "Failed to load projects",
+          variant: "destructive",
+        });
+      } else {
+        setProjects(data || []);
+      }
+    } catch (error) {
+      console.error('Error loading projects:', error);
+    } finally {
+      setIsLoading(false);
     }
-  }, []);
+  };
 
   const handleProjectSelect = (projectId: string) => {
     navigate(`/project/${projectId}`);
   };
+
+  if (isLoading) {
+    return (
+      <Layout showLogoNavigation={true}>
+        <div className="max-w-md mx-auto mt-8 text-center">
+          <p className="text-gray-500">Loading projects...</p>
+        </div>
+      </Layout>
+    );
+  }
 
   return (
     <Layout showLogoNavigation={true}>
@@ -56,7 +97,7 @@ const MyProjects = () => {
                 <div>
                   <div className="font-semibold text-black">{project.name}</div>
                   <div className="text-sm text-gray-500">
-                    Created: {new Date(project.createdAt).toLocaleDateString()}
+                    Created: {new Date(project.created_at).toLocaleDateString()}
                   </div>
                 </div>
               </Button>

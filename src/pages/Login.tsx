@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { toast } from '@/hooks/use-toast';
+import { supabase } from '@/integrations/supabase/client';
 import Layout from '@/components/Layout';
 
 const Login = () => {
@@ -24,30 +25,42 @@ const Login = () => {
 
     setIsLoading(true);
     
-    // Simulate magic link email sending
-    setTimeout(() => {
-      const magicLink = `mailto:${email}?subject=Bid2Bid Magic Link&body=Click here to login to Bid2Bid: https://bid2bid.app/auth/verify?token=magic-token-${Date.now()}`;
-      window.location.href = magicLink;
-      
-      toast({
-        title: "Magic Link Sent!",
-        description: "Check your email and click the magic link to log in.",
+    try {
+      const { error } = await supabase.auth.signInWithOtp({
+        email: email,
+        options: {
+          emailRedirectTo: `${window.location.origin}/home`,
+        },
       });
-      
-      // For demo purposes, automatically navigate after 3 seconds
-      setTimeout(() => {
-        navigate('/home');
-      }, 3000);
-      
+
+      if (error) {
+        toast({
+          title: "Error",
+          description: error.message,
+          variant: "destructive",
+        });
+      } else {
+        toast({
+          title: "Magic Link Sent!",
+          description: "Check your email and click the magic link to log in.",
+        });
+      }
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Something went wrong. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
       setIsLoading(false);
-    }, 1000);
+    }
   };
 
   return (
     <Layout>
       <div className="max-w-md mx-auto mt-8">
         <div className="text-center mb-8">
-          <h1 className="text-2xl font-bold text-black mb-2">Welcome to Bid2Bid</h1>
+          <h1 className="text-2xl font-bold text-black mb-2">Welcome!</h1>
           <p className="text-gray-600">Enter your email to receive a magic link</p>
         </div>
 
