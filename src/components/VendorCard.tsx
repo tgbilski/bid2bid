@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react'; // Make sure useEffect is imported
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -11,7 +11,7 @@ export interface VendorData {
   vendorName: string;
   startDate: string;
   jobDuration: string;
-  totalCost: string; // This will now hold the formatted string, but we'll manage raw input
+  totalCost: string; 
   isFavorite?: boolean;
 }
 
@@ -24,28 +24,37 @@ interface VendorCardProps {
 }
 
 const VendorCard = ({ vendor, onUpdate, onDelete, onFavorite, canDelete }: VendorCardProps) => {
-  // Add local state to manage the input's raw value while typing
-  const [localCostValue, setLocalCostValue] = useState(vendor.totalCost);
+  // Function to clean a formatted currency string to just numbers and a dot
+  // This is crucial for separating display from raw input.
+  const cleanForProcessing = (value: string) => {
+    return value.replace(/[^0-9.]/g, '');
+  };
 
-  // Update local state when vendor prop changes (e.g., initial load or parent update)
-  // This ensures the input value always reflects the current vendor data.
-  // Use useEffect to handle prop changes
-  useState(() => {
-    setLocalCostValue(vendor.totalCost);
-  }, [vendor.totalCost]);
+  // Local state to manage the input's raw (unformatted) value while typing
+  const [localCostValue, setLocalCostValue] = useState('');
+
+  // Use useEffect to synchronize local state with parent prop 'vendor.totalCost'
+  // This runs when the component mounts and whenever vendor.totalCost changes from parent.
+  useEffect(() => {
+    // When vendor.totalCost changes from props, update local state
+    // We clean the incoming vendor.totalCost (which might be "$1,234.56")
+    // to remove '$', commas, etc., so that editing starts with just the raw number "1234.56".
+    setLocalCostValue(cleanForProcessing(vendor.totalCost));
+  }, [vendor.totalCost]); // Dependency array: run effect when vendor.totalCost changes
 
 
   const formatCurrency = (value: string) => {
-    // This function is for final display formatting
-    // It should convert a numeric string (e.g., "123.45") to "$123.45"
+    // This function is for final display formatting (e.g., "123.45" -> "$123.45")
 
-    // Remove all non-numeric characters except decimal point
+    // Clean the value to get only numeric parts (including a decimal)
     const numericValue = value.replace(/[^0-9.]/g, '');
+    
+    let number = parseFloat(numericValue);
 
-    if (numericValue === '' || numericValue === '.') return ''; // Or return "$0.00" if you prefer for empty
-
-    const number = parseFloat(numericValue);
-    if (isNaN(number)) return ''; // Or return "$0.00"
+    // KEY FIX: If it's not a valid number (e.g., empty string, just "."), default to 0
+    if (isNaN(number) || numericValue === '') {
+        number = 0; // Default to 0 for formatting as $0.00
+    }
 
     return number.toLocaleString('en-US', {
       style: 'currency',
@@ -55,13 +64,6 @@ const VendorCard = ({ vendor, onUpdate, onDelete, onFavorite, canDelete }: Vendo
     });
   };
 
-  const cleanForProcessing = (value: string) => {
-    // This function takes the displayed value (e.g., "$1,234.56")
-    // and returns a raw numeric string (e.g., "1234.56") for internal storage/calculations.
-    return value.replace(/[^0-9.]/g, '');
-  };
-
-
   const handleCostChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const inputValue = e.target.value;
 
@@ -70,14 +72,18 @@ const VendorCard = ({ vendor, onUpdate, onDelete, onFavorite, canDelete }: Vendo
     const sanitizedValue = inputValue.replace(/[^0-9.]/g, '')
                                      .replace(/(\..*)\./g, '$1'); // Only allow one decimal point
 
-    // Update the local state for immediate feedback
+    // Update the local state for immediate feedback in the input field
     setLocalCostValue(sanitizedValue);
   };
 
   const handleCostBlur = () => {
     // When the user leaves the field, format the value for display
-    const formatted = formatCurrency(localCostValue);
-    onUpdate(vendor.id, 'totalCost', formatted); // Update parent state with formatted value
+    // Ensure that localCostValue is a clean numeric string before formatting
+    const cleanedValue = cleanForProcessing(localCostValue); 
+    const formatted = formatCurrency(cleanedValue);
+    
+    // Update parent state with the fully formatted value
+    onUpdate(vendor.id, 'totalCost', formatted);
   };
 
   return (
@@ -163,13 +169,11 @@ const VendorCard = ({ vendor, onUpdate, onDelete, onFavorite, canDelete }: Vendo
             </Label>
             <Input
               id={`total-cost-${vendor.id}`}
-              value={localCostValue} // Use local state for input value
-              onChange={handleCostChange} // Update local state on change
-              onBlur={handleCostBlur} // Format and update parent state on blur
+              value={localCostValue} // Input displays the raw, editable value
+              onChange={handleCostChange} // Updates the raw local state
+              onBlur={handleCostBlur} // Formats and updates parent state on blur
               placeholder="$0.00"
               className="mt-1"
-              // No maxLength here unless you want to limit the raw number of characters
-              // It's usually better to let the currency format handle length after blur
             />
           </div>
         </div>
