@@ -1,4 +1,5 @@
 
+
 import { useNavigate } from 'react-router-dom';
 import Logo from './Logo';
 
@@ -17,7 +18,7 @@ const Layout = ({ children, showLogoNavigation = false }: LayoutProps) => {
   };
 
   return (
-    <div className="min-h-screen bg-white">
+    <div className="min-h-screen bg-white" style={{ paddingTop: '50px' }}>
       <div className="pt-6 pb-4">
         <Logo onClick={showLogoNavigation ? handleLogoClick : undefined} />
       </div>
@@ -29,3 +30,4 @@ const Layout = ({ children, showLogoNavigation = false }: LayoutProps) => {
 };
 
 export default Layout;
+
