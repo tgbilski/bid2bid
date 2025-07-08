@@ -148,6 +148,7 @@ const VendorCard = ({ vendor, onUpdate, onDelete, onFavorite, canDelete }: Vendo
               onBlur={handleCostBlur}
               placeholder="$0.00"
               className="mt-1"
+              maxLength={15} // <-- Add this line
             />
           </div>
         </div>
