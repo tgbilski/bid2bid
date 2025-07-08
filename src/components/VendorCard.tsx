@@ -1,4 +1,3 @@
-
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -12,7 +11,7 @@ export interface VendorData {
   vendorName: string;
   startDate: string;
   jobDuration: string;
-  totalCost: string;
+  totalCost: string; // This will now hold the formatted string, but we'll manage raw input
   isFavorite?: boolean;
 }
 
@@ -25,39 +24,60 @@ interface VendorCardProps {
 }
 
 const VendorCard = ({ vendor, onUpdate, onDelete, onFavorite, canDelete }: VendorCardProps) => {
+  // Add local state to manage the input's raw value while typing
+  const [localCostValue, setLocalCostValue] = useState(vendor.totalCost);
+
+  // Update local state when vendor prop changes (e.g., initial load or parent update)
+  // This ensures the input value always reflects the current vendor data.
+  // Use useEffect to handle prop changes
+  useState(() => {
+    setLocalCostValue(vendor.totalCost);
+  }, [vendor.totalCost]);
+
+
   const formatCurrency = (value: string) => {
+    // This function is for final display formatting
+    // It should convert a numeric string (e.g., "123.45") to "$123.45"
+
     // Remove all non-numeric characters except decimal point
     const numericValue = value.replace(/[^0-9.]/g, '');
-    
-    // Handle empty string
-    if (numericValue === '' || numericValue === '.') return '';
-    
-    // Parse the number
+
+    if (numericValue === '' || numericValue === '.') return ''; // Or return "$0.00" if you prefer for empty
+
     const number = parseFloat(numericValue);
-    if (isNaN(number)) return '';
-    
-    // Format to currency
+    if (isNaN(number)) return ''; // Or return "$0.00"
+
     return number.toLocaleString('en-US', {
       style: 'currency',
       currency: 'USD',
       minimumFractionDigits: 2,
-      maximumFractionDigits: 2
+      maximumFractionDigits: 2,
     });
   };
 
-  const handleCostChange = (value: string) => {
-    const formatted = formatCurrency(value);
-    onUpdate(vendor.id, 'totalCost', formatted);
+  const cleanForProcessing = (value: string) => {
+    // This function takes the displayed value (e.g., "$1,234.56")
+    // and returns a raw numeric string (e.g., "1234.56") for internal storage/calculations.
+    return value.replace(/[^0-9.]/g, '');
+  };
+
+
+  const handleCostChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const inputValue = e.target.value;
+
+    // Allow typing of numbers and a single decimal point
+    // This regex allows digits and at most one decimal point
+    const sanitizedValue = inputValue.replace(/[^0-9.]/g, '')
+                                     .replace(/(\..*)\./g, '$1'); // Only allow one decimal point
+
+    // Update the local state for immediate feedback
+    setLocalCostValue(sanitizedValue);
   };
 
   const handleCostBlur = () => {
-    // Ensure proper formatting on blur
-    if (vendor.totalCost && vendor.totalCost !== '$0.00') {
-      const formatted = formatCurrency(vendor.totalCost);
-      if (formatted !== vendor.totalCost) {
-        onUpdate(vendor.id, 'totalCost', formatted);
-      }
-    }
+    // When the user leaves the field, format the value for display
+    const formatted = formatCurrency(localCostValue);
+    onUpdate(vendor.id, 'totalCost', formatted); // Update parent state with formatted value
   };
 
   return (
@@ -143,12 +163,13 @@ const VendorCard = ({ vendor, onUpdate, onDelete, onFavorite, canDelete }: Vendo
             </Label>
             <Input
               id={`total-cost-${vendor.id}`}
-              value={vendor.totalCost}
-              onChange={(e) => handleCostChange(e.target.value)}
-              onBlur={handleCostBlur}
+              value={localCostValue} // Use local state for input value
+              onChange={handleCostChange} // Update local state on change
+              onBlur={handleCostBlur} // Format and update parent state on blur
               placeholder="$0.00"
               className="mt-1"
-              maxLength={15} // <-- Add this line
+              // No maxLength here unless you want to limit the raw number of characters
+              // It's usually better to let the currency format handle length after blur
             />
           </div>
         </div>
