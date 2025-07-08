@@ -8,19 +8,38 @@ import { toast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import Layout from '@/components/Layout';
 
-const Login = () => {
+const SignUp = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const navigate = useNavigate();
 
-  const handleSignIn = async (e: React.FormEvent) => {
+  const handleSignUp = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (!email || !password) {
+    if (!email || !password || !confirmPassword) {
       toast({
-        title: "Fields Required",
-        description: "Please enter both email and password.",
+        title: "All Fields Required",
+        description: "Please fill in all fields.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (password !== confirmPassword) {
+      toast({
+        title: "Passwords Don't Match",
+        description: "Please make sure both passwords match.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (password.length < 6) {
+      toast({
+        title: "Password Too Short",
+        description: "Password must be at least 6 characters long.",
         variant: "destructive",
       });
       return;
@@ -29,23 +48,34 @@ const Login = () => {
     setIsLoading(true);
     
     try {
-      const { data, error } = await supabase.auth.signInWithPassword({
+      const { data, error } = await supabase.auth.signUp({
         email: email,
         password: password,
+        options: {
+          emailRedirectTo: `${window.location.origin}/home`,
+        },
       });
 
       if (error) {
         toast({
-          title: "Sign In Failed",
+          title: "Sign Up Failed",
           description: error.message,
           variant: "destructive",
         });
       } else if (data.user) {
-        toast({
-          title: "Welcome back!",
-          description: "You have been signed in successfully.",
-        });
-        navigate('/home');
+        if (data.user.email_confirmed_at) {
+          toast({
+            title: "Account Created!",
+            description: "You have been signed up successfully.",
+          });
+          navigate('/home');
+        } else {
+          toast({
+            title: "Check Your Email",
+            description: "We've sent you a confirmation email. Please check your inbox and click the confirmation link to activate your account.",
+          });
+          navigate('/login');
+        }
       }
     } catch (error) {
       toast({
@@ -58,51 +88,15 @@ const Login = () => {
     }
   };
 
-  const handleForgotPassword = async () => {
-    if (!email) {
-      toast({
-        title: "Email Required",
-        description: "Please enter your email address first.",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    try {
-      const { error } = await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo: `${window.location.origin}/reset-password`,
-      });
-
-      if (error) {
-        toast({
-          title: "Error",
-          description: error.message,
-          variant: "destructive",
-        });
-      } else {
-        toast({
-          title: "Password Reset Email Sent",
-          description: "Check your email for password reset instructions.",
-        });
-      }
-    } catch (error) {
-      toast({
-        title: "Error",
-        description: "Something went wrong. Please try again.",
-        variant: "destructive",
-      });
-    }
-  };
-
   return (
     <Layout>
       <div className="max-w-md mx-auto mt-8">
         <div className="text-center mb-8">
-          <h1 className="text-2xl font-bold text-black mb-2">Welcome Back!</h1>
-          <p className="text-gray-600">Sign in to your account</p>
+          <h1 className="text-2xl font-bold text-black mb-2">Create Account</h1>
+          <p className="text-gray-600">Sign up for a new account</p>
         </div>
 
-        <form onSubmit={handleSignIn} className="space-y-4">
+        <form onSubmit={handleSignUp} className="space-y-4">
           <div>
             <Label htmlFor="email" className="text-black">
               Email Address
@@ -127,9 +121,26 @@ const Login = () => {
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              placeholder="Enter your password"
+              placeholder="Create a password (min. 6 characters)"
               className="mt-1"
               required
+              minLength={6}
+            />
+          </div>
+
+          <div>
+            <Label htmlFor="confirmPassword" className="text-black">
+              Confirm Password
+            </Label>
+            <Input
+              id="confirmPassword"
+              type="password"
+              value={confirmPassword}
+              onChange={(e) => setConfirmPassword(e.target.value)}
+              placeholder="Confirm your password"
+              className="mt-1"
+              required
+              minLength={6}
             />
           </div>
 
@@ -138,27 +149,18 @@ const Login = () => {
             disabled={isLoading}
             className="w-full bg-black text-white hover:bg-gray-800 rounded-[10px] h-12"
           >
-            {isLoading ? 'Signing In...' : 'Sign In'}
+            {isLoading ? 'Creating Account...' : 'Sign Up'}
           </Button>
         </form>
 
         <div className="mt-6 text-center">
-          <button
-            onClick={handleForgotPassword}
-            className="text-sm text-blue-600 hover:text-blue-800 underline"
-          >
-            Forgot your password?
-          </button>
-        </div>
-
-        <div className="mt-6 text-center">
           <p className="text-gray-600">
-            Don't have an account?{' '}
+            Already have an account?{' '}
             <Link
-              to="/signup"
+              to="/login"
               className="text-blue-600 hover:text-blue-800 underline font-medium"
             >
-              Sign up here
+              Sign in here
             </Link>
           </p>
         </div>
@@ -167,4 +169,4 @@ const Login = () => {
   );
 };
 
-export default Login;
+export default SignUp;
