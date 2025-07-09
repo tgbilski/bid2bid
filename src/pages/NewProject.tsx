@@ -166,13 +166,29 @@ const NewProject = () => {
         }
       }
 
-      // Note: Project sharing functionality will be implemented once database types are updated
+      // Handle project sharing if email is provided and user is subscribed
       if (sharedEmail && isSubscribed) {
-        console.log('Project sharing will be implemented with proper database types');
-        toast({
-          title: "Project Saved!",
-          description: "Project saved. Sharing functionality coming soon!",
-        });
+        const { error: shareError } = await supabase
+          .from('project_shares')
+          .insert({
+            project_id: projectData.id,
+            owner_id: session.user.id,
+            shared_with_email: sharedEmail.trim()
+          });
+
+        if (shareError) {
+          console.error('Error sharing project:', shareError);
+          toast({
+            title: "Project Saved",
+            description: "Project saved but failed to share with the specified email.",
+            variant: "destructive",
+          });
+        } else {
+          toast({
+            title: "Project Saved and Shared!",
+            description: `Project has been saved and shared with ${sharedEmail}.`,
+          });
+        }
       } else {
         toast({
           title: "Project Saved!",
