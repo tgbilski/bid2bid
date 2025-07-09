@@ -7,6 +7,7 @@ import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import Login from "./pages/Login";
 import SignUp from "./pages/SignUp";
 import ResetPassword from "./pages/ResetPassword";
+import Subscription from "./pages/Subscription";
 import Home from "./pages/Home";
 import MyProjects from "./pages/MyProjects";
 import NewProject from "./pages/NewProject";
@@ -26,6 +27,7 @@ const App = () => (
           <Route path="/login" element={<Login />} />
           <Route path="/signup" element={<SignUp />} />
           <Route path="/reset-password" element={<ResetPassword />} />
+          <Route path="/subscription" element={<Subscription />} />
           <Route path="/home" element={<Home />} />
           <Route path="/my-projects" element={<MyProjects />} />
           <Route path="/new-project" element={<NewProject />} />

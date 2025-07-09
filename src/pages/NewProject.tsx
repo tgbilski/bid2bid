@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
@@ -12,25 +11,47 @@ import VendorCard, { VendorData } from '@/components/VendorCard';
 
 const NewProject = () => {
   const [projectName, setProjectName] = useState('');
+  const [sharedEmail, setSharedEmail] = useState('');
   const [vendors, setVendors] = useState<VendorData[]>([]);
+  const [isSubscribed, setIsSubscribed] = useState(false);
   const navigate = useNavigate();
 
   useEffect(() => {
-    const checkAuth = async () => {
+    const checkAuthAndSubscription = async () => {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) {
         navigate('/login');
         return;
       }
+      await checkSubscription();
     };
 
-    checkAuth();
+    checkAuthAndSubscription();
 
     // Initialize with one empty vendor card
     if (vendors.length === 0) {
       addVendor();
     }
   }, [navigate]);
+
+  const checkSubscription = async () => {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
+
+      const { data, error } = await supabase.functions.invoke('check-subscription', {
+        headers: {
+          Authorization: `Bearer ${session.access_token}`,
+        },
+      });
+
+      if (!error && data) {
+        setIsSubscribed(data.subscribed || false);
+      }
+    } catch (error) {
+      console.error('Error checking subscription:', error);
+    }
+  };
 
   const addVendor = () => {
     if (vendors.length >= 10) {
@@ -88,6 +109,15 @@ const NewProject = () => {
       return;
     }
 
+    if (sharedEmail && !isSubscribed) {
+      toast({
+        title: "Premium Feature",
+        description: "Project sharing is only available with a Premium subscription.",
+        variant: "destructive",
+      });
+      return;
+    }
+
     try {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) {
@@ -135,10 +165,35 @@ const NewProject = () => {
         }
       }
 
-      toast({
-        title: "Project Saved!",
-        description: "Your project has been saved successfully.",
-      });
+      // Save project share if email is provided and user is subscribed
+      if (sharedEmail && isSubscribed) {
+        const { error: shareError } = await supabase
+          .from('project_shares')
+          .insert({
+            project_id: projectData.id,
+            owner_id: session.user.id,
+            shared_with_email: sharedEmail
+          });
+
+        if (shareError) {
+          console.error('Error sharing project:', shareError);
+          toast({
+            title: "Project Saved",
+            description: "Project saved but failed to share with the specified email.",
+            variant: "destructive",
+          });
+        } else {
+          toast({
+            title: "Project Saved and Shared!",
+            description: `Project has been saved and shared with ${sharedEmail}.`,
+          });
+        }
+      } else {
+        toast({
+          title: "Project Saved!",
+          description: "Your project has been saved successfully.",
+        });
+      }
       
       navigate('/my-projects');
     } catch (error) {
@@ -171,6 +226,26 @@ const NewProject = () => {
               placeholder="Enter project name"
               className="mt-1"
             />
+          </div>
+
+          <div>
+            <Label htmlFor="shared-email" className="text-black">
+              Share with Email {!isSubscribed && <span className="text-sm text-gray-500">(Premium Feature)</span>}
+            </Label>
+            <Input
+              id="shared-email"
+              type="email"
+              value={sharedEmail}
+              onChange={(e) => setSharedEmail(e.target.value)}
+              placeholder={isSubscribed ? "Enter email to share project" : "Upgrade to Premium to share projects"}
+              className="mt-1"
+              disabled={!isSubscribed}
+            />
+            {!isSubscribed && (
+              <p className="text-sm text-gray-500 mt-1">
+                Upgrade to Premium to share projects with others
+              </p>
+            )}
           </div>
 
           <div className="space-y-4">

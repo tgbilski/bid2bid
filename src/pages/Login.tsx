@@ -1,4 +1,3 @@
-
 import { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
@@ -45,7 +44,7 @@ const Login = () => {
           title: "Welcome back!",
           description: "You have been signed in successfully.",
         });
-        navigate('/home');
+        navigate('/subscription');
       }
     } catch (error) {
       toast({
