@@ -1,3 +1,4 @@
+
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
@@ -165,29 +166,13 @@ const NewProject = () => {
         }
       }
 
-      // Save project share if email is provided and user is subscribed
+      // Note: Project sharing functionality will be implemented once database types are updated
       if (sharedEmail && isSubscribed) {
-        const { error: shareError } = await supabase
-          .from('project_shares')
-          .insert({
-            project_id: projectData.id,
-            owner_id: session.user.id,
-            shared_with_email: sharedEmail
-          });
-
-        if (shareError) {
-          console.error('Error sharing project:', shareError);
-          toast({
-            title: "Project Saved",
-            description: "Project saved but failed to share with the specified email.",
-            variant: "destructive",
-          });
-        } else {
-          toast({
-            title: "Project Saved and Shared!",
-            description: `Project has been saved and shared with ${sharedEmail}.`,
-          });
-        }
+        console.log('Project sharing will be implemented with proper database types');
+        toast({
+          title: "Project Saved!",
+          description: "Project saved. Sharing functionality coming soon!",
+        });
       } else {
         toast({
           title: "Project Saved!",
