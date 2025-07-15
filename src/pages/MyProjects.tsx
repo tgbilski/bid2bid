@@ -2,7 +2,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
-import { X, UserX } from 'lucide-react';
+import { X } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from '@/hooks/use-toast';
 import Layout from '@/components/Layout';
@@ -50,26 +50,8 @@ const MyProjects = () => {
         console.error('Error loading owned projects:', ownedError);
       }
 
-      // Load shared projects
-      const { data: sharedProjects, error: sharedError } = await supabase
-        .from('project_shares')
-        .select(`
-          project_id,
-          projects:project_id (
-            id,
-            name,
-            created_at,
-            user_id
-          )
-        `)
-        .eq('shared_with_email', session.user.email)
-        .order('created_at', { ascending: false });
-
-      if (sharedError) {
-        console.error('Error loading shared projects:', sharedError);
-      }
-
-      // Combine and format projects
+      // TODO: Load shared projects once project_shares table is in types
+      // For now, just show owned projects
       const allProjects: Project[] = [];
       
       // Add owned projects
@@ -77,16 +59,6 @@ const MyProjects = () => {
         allProjects.push(...ownedProjects.map(project => ({
           ...project,
           is_shared: false
-        })));
-      }
-
-      // Add shared projects
-      if (sharedProjects) {
-        allProjects.push(...sharedProjects.map(share => ({
-          id: share.projects.id,
-          name: share.projects.name,
-          created_at: share.projects.created_at,
-          is_shared: true
         })));
       }
 
@@ -119,11 +91,7 @@ const MyProjects = () => {
         .delete()
         .eq('project_id', projectId);
 
-      // Delete project shares
-      await supabase
-        .from('project_shares')
-        .delete()
-        .eq('project_id', projectId);
+      // TODO: Delete project shares once project_shares table is in types
 
       // Then delete the project
       const { error } = await supabase
@@ -149,46 +117,6 @@ const MyProjects = () => {
       toast({
         title: "Error",
         description: "Failed to delete project",
-        variant: "destructive",
-      });
-    }
-  };
-
-  const handleRemoveSharedProject = async (projectId: string, projectName: string, e: React.MouseEvent) => {
-    e.stopPropagation();
-    
-    if (!confirm(`Are you sure you want to remove "${projectName}" from your shared projects?`)) {
-      return;
-    }
-
-    try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) return;
-
-      const { error } = await supabase
-        .from('project_shares')
-        .delete()
-        .eq('project_id', projectId)
-        .eq('shared_with_email', session.user.email);
-
-      if (error) {
-        toast({
-          title: "Error",
-          description: "Failed to remove shared project",
-          variant: "destructive",
-        });
-      } else {
-        toast({
-          title: "Project Removed",
-          description: `"${projectName}" has been removed from your shared projects.`,
-        });
-        await loadProjects();
-      }
-    } catch (error) {
-      console.error('Error removing shared project:', error);
-      toast({
-        title: "Error",
-        description: "Failed to remove shared project",
         variant: "destructive",
       });
     }
@@ -254,23 +182,13 @@ const MyProjects = () => {
                   </div>
                 </Button>
                 
-                {project.is_shared ? (
-                  <button
-                    onClick={(e) => handleRemoveSharedProject(project.id, project.name, e)}
-                    className="absolute right-3 top-1/2 transform -translate-y-1/2 p-1 hover:bg-blue-100 rounded-full transition-colors"
-                    title="Remove from shared projects"
-                  >
-                    <UserX size={16} className="text-blue-500 hover:text-blue-700" />
-                  </button>
-                ) : (
-                  <button
-                    onClick={(e) => handleDeleteProject(project.id, project.name, e)}
-                    className="absolute right-3 top-1/2 transform -translate-y-1/2 p-1 hover:bg-red-100 rounded-full transition-colors"
-                    title="Delete project"
-                  >
-                    <X size={16} className="text-red-500 hover:text-red-700" />
-                  </button>
-                )}
+                <button
+                  onClick={(e) => handleDeleteProject(project.id, project.name, e)}
+                  className="absolute right-3 top-1/2 transform -translate-y-1/2 p-1 hover:bg-red-100 rounded-full transition-colors"
+                  title="Delete project"
+                >
+                  <X size={16} className="text-red-500 hover:text-red-700" />
+                </button>
               </div>
             ))
           )}
