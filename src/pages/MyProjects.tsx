@@ -50,8 +50,19 @@ const MyProjects = () => {
         console.error('Error loading owned projects:', ownedError);
       }
 
-      // TODO: Load shared projects once project_shares table is in types
-      // For now, just show owned projects
+      // Load shared projects
+      const { data: sharedProjectData, error: sharedError } = await supabase
+        .from('project_shares')
+        .select(`
+          project_id,
+          projects!inner(id, name, created_at)
+        `)
+        .eq('shared_with_email', session.user.email);
+
+      if (sharedError) {
+        console.error('Error loading shared projects:', sharedError);
+      }
+
       const allProjects: Project[] = [];
       
       // Add owned projects
@@ -59,6 +70,16 @@ const MyProjects = () => {
         allProjects.push(...ownedProjects.map(project => ({
           ...project,
           is_shared: false
+        })));
+      }
+
+      // Add shared projects
+      if (sharedProjectData) {
+        allProjects.push(...sharedProjectData.map(share => ({
+          id: share.projects.id,
+          name: share.projects.name,
+          created_at: share.projects.created_at,
+          is_shared: true
         })));
       }
 
@@ -77,48 +98,92 @@ const MyProjects = () => {
     navigate(`/project/${projectId}`);
   };
 
-  const handleDeleteProject = async (projectId: string, projectName: string, e: React.MouseEvent) => {
+  const handleDeleteProject = async (projectId: string, projectName: string, isShared: boolean, e: React.MouseEvent) => {
     e.stopPropagation();
     
-    if (!confirm(`Are you sure you want to delete "${projectName}"? This action cannot be undone.`)) {
-      return;
-    }
+    if (isShared) {
+      // For shared projects, remove the user from the share
+      if (!confirm(`Are you sure you want to remove yourself from the shared project "${projectName}"?`)) {
+        return;
+      }
 
-    try {
-      // Delete vendors first (foreign key constraint)
-      await supabase
-        .from('vendors')
-        .delete()
-        .eq('project_id', projectId);
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session) return;
 
-      // TODO: Delete project shares once project_shares table is in types
+        const { error } = await supabase
+          .from('project_shares')
+          .delete()
+          .eq('project_id', projectId)
+          .eq('shared_with_email', session.user.email);
 
-      // Then delete the project
-      const { error } = await supabase
-        .from('projects')
-        .delete()
-        .eq('id', projectId);
+        if (error) {
+          toast({
+            title: "Error",
+            description: "Failed to remove yourself from shared project",
+            variant: "destructive",
+          });
+        } else {
+          toast({
+            title: "Removed from Project",
+            description: `You have been removed from "${projectName}".`,
+          });
+          await loadProjects();
+        }
+      } catch (error) {
+        console.error('Error removing from shared project:', error);
+        toast({
+          title: "Error",
+          description: "Failed to remove yourself from shared project",
+          variant: "destructive",
+        });
+      }
+    } else {
+      // For owned projects, delete the entire project
+      if (!confirm(`Are you sure you want to delete "${projectName}"? This action cannot be undone.`)) {
+        return;
+      }
 
-      if (error) {
+      try {
+        // Delete vendors first (foreign key constraint)
+        await supabase
+          .from('vendors')
+          .delete()
+          .eq('project_id', projectId);
+
+        // Delete project shares
+        await supabase
+          .from('project_shares')
+          .delete()
+          .eq('project_id', projectId);
+
+        // Then delete the project
+        const { error } = await supabase
+          .from('projects')
+          .delete()
+          .eq('id', projectId);
+
+        if (error) {
+          toast({
+            title: "Error",
+            description: "Failed to delete project",
+            variant: "destructive",
+          });
+        } else {
+          toast({
+            title: "Project Deleted",
+            description: `"${projectName}" has been deleted successfully.`,
+          });
+          await loadProjects();
+        }
+      } catch (error) {
+        console.error('Error deleting project:', error);
         toast({
           title: "Error",
           description: "Failed to delete project",
           variant: "destructive",
         });
-      } else {
-        toast({
-          title: "Project Deleted",
-          description: `"${projectName}" has been deleted successfully.`,
-        });
-        await loadProjects();
       }
-    } catch (error) {
-      console.error('Error deleting project:', error);
-      toast({
-        title: "Error",
-        description: "Failed to delete project",
-        variant: "destructive",
-      });
     }
   };
 
@@ -183,9 +248,9 @@ const MyProjects = () => {
                 </Button>
                 
                 <button
-                  onClick={(e) => handleDeleteProject(project.id, project.name, e)}
+                  onClick={(e) => handleDeleteProject(project.id, project.name, project.is_shared || false, e)}
                   className="absolute right-3 top-1/2 transform -translate-y-1/2 p-1 hover:bg-red-100 rounded-full transition-colors"
-                  title="Delete project"
+                  title={project.is_shared ? "Remove from shared projects" : "Delete project"}
                 >
                   <X size={16} className="text-red-500 hover:text-red-700" />
                 </button>

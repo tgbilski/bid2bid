@@ -7,15 +7,16 @@ const BackButton = () => {
   const navigate = useNavigate();
 
   return (
-    <Button
-      onClick={() => navigate('/home')}
-      variant="ghost"
-      size="sm"
-      className="mb-4 text-black hover:bg-gray-100"
-    >
-      <Home size={16} className="mr-2" />
-      Back to Home
-    </Button>
+    <div className="flex justify-center mb-2">
+      <Button
+        onClick={() => navigate('/home')}
+        variant="ghost"
+        size="sm"
+        className="text-black hover:bg-gray-100 p-2"
+      >
+        <Home size={20} />
+      </Button>
+    </div>
   );
 };
 

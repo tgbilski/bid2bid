@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
@@ -84,9 +83,17 @@ const ExistingProject = () => {
       setProject(projectData);
       setProjectName(projectData.name);
 
-      // TODO: Load existing share info once project_shares table is in types
-      // For now, just initialize with empty array
-      setSharedEmails([]);
+      // Load existing shares
+      const { data: sharesData, error: sharesError } = await supabase
+        .from('project_shares')
+        .select('shared_with_email')
+        .eq('project_id', projectId);
+
+      if (sharesError) {
+        console.error('Error loading shares:', sharesError);
+      } else if (sharesData) {
+        setSharedEmails(sharesData.map(share => share.shared_with_email));
+      }
 
       // Load vendors
       const { data: vendorData, error: vendorError } = await supabase
@@ -237,8 +244,37 @@ const ExistingProject = () => {
         }
       }
 
-      // TODO: Handle project sharing once project_shares table is in types
-      // For now, just show success message
+      // Handle project sharing
+      if (isSubscribed) {
+        // Delete existing shares
+        await supabase
+          .from('project_shares')
+          .delete()
+          .eq('project_id', project.id);
+
+        // Insert new shares
+        if (sharedEmails.length > 0) {
+          const shareInserts = sharedEmails.map(email => ({
+            project_id: project.id,
+            owner_id: session.user.id,
+            shared_with_email: email
+          }));
+
+          const { error: shareError } = await supabase
+            .from('project_shares')
+            .insert(shareInserts);
+
+          if (shareError) {
+            console.error('Error saving shares:', shareError);
+            toast({
+              title: "Warning",
+              description: "Project saved but sharing may not have worked properly.",
+              variant: "destructive",
+            });
+          }
+        }
+      }
+
       toast({
         title: "Project Updated!",
         description: "Your project has been updated successfully.",

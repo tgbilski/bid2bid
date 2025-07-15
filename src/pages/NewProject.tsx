@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
@@ -168,8 +167,28 @@ const NewProject = () => {
         }
       }
 
-      // TODO: Handle project sharing once project_shares table is in types
-      // For now, just show success message
+      // Handle project sharing
+      if (isSubscribed && sharedEmails.length > 0) {
+        const shareInserts = sharedEmails.map(email => ({
+          project_id: projectData.id,
+          owner_id: session.user.id,
+          shared_with_email: email
+        }));
+
+        const { error: shareError } = await supabase
+          .from('project_shares')
+          .insert(shareInserts);
+
+        if (shareError) {
+          console.error('Error saving shares:', shareError);
+          toast({
+            title: "Warning",
+            description: "Project saved but sharing may not have worked properly.",
+            variant: "destructive",
+          });
+        }
+      }
+
       toast({
         title: "Project Saved!",
         description: "Your project has been saved successfully.",
