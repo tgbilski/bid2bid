@@ -8,11 +8,13 @@ import { Plus } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import Layout from '@/components/Layout';
+import BackButton from '@/components/BackButton';
+import EmailSharingInput from '@/components/EmailSharingInput';
 import VendorCard, { VendorData } from '@/components/VendorCard';
 
 const NewProject = () => {
   const [projectName, setProjectName] = useState('');
-  const [sharedEmail, setSharedEmail] = useState('');
+  const [sharedEmails, setSharedEmails] = useState<string[]>([]);
   const [vendors, setVendors] = useState<VendorData[]>([]);
   const [isSubscribed, setIsSubscribed] = useState(false);
   const navigate = useNavigate();
@@ -110,7 +112,7 @@ const NewProject = () => {
       return;
     }
 
-    if (sharedEmail && !isSubscribed) {
+    if (sharedEmails.length > 0 && !isSubscribed) {
       toast({
         title: "Premium Feature",
         description: "Project sharing is only available with a Premium subscription.",
@@ -166,13 +168,31 @@ const NewProject = () => {
         }
       }
 
-      // Note: Project sharing functionality temporarily disabled due to TypeScript issues
-      // Will be re-enabled once database types are properly regenerated
-      if (sharedEmail && isSubscribed) {
-        toast({
-          title: "Project Saved",
-          description: "Project saved successfully. Sharing functionality will be available soon.",
-        });
+      // Handle project sharing if emails are provided and user is subscribed
+      if (sharedEmails.length > 0 && isSubscribed) {
+        const shareInserts = sharedEmails.map(email => ({
+          project_id: projectData.id,
+          owner_id: session.user.id,
+          shared_with_email: email
+        }));
+
+        const { error: shareError } = await supabase
+          .from('project_shares')
+          .insert(shareInserts);
+
+        if (shareError) {
+          console.error('Error sharing project:', shareError);
+          toast({
+            title: "Project Saved",
+            description: "Project saved but failed to share with some emails.",
+            variant: "destructive",
+          });
+        } else {
+          toast({
+            title: "Project Saved and Shared!",
+            description: `Project has been saved and shared with ${sharedEmails.length} recipient(s).`,
+          });
+        }
       } else {
         toast({
           title: "Project Saved!",
@@ -192,8 +212,10 @@ const NewProject = () => {
   };
 
   return (
-    <Layout showLogoNavigation={true}>
+    <Layout showLogoNavigation={false}>
       <div className="max-w-md mx-auto mt-8 pb-8">
+        <BackButton />
+        
         <div className="text-center mb-8">
           <h1 className="text-2xl font-bold text-black mb-2">New Project</h1>
           <p className="text-gray-600">Create a new bidding project</p>
@@ -213,25 +235,11 @@ const NewProject = () => {
             />
           </div>
 
-          <div>
-            <Label htmlFor="shared-email" className="text-black">
-              Share with Email {!isSubscribed && <span className="text-sm text-gray-500">(Premium Feature)</span>}
-            </Label>
-            <Input
-              id="shared-email"
-              type="email"
-              value={sharedEmail}
-              onChange={(e) => setSharedEmail(e.target.value)}
-              placeholder={isSubscribed ? "Enter email to share project" : "Upgrade to Premium to share projects"}
-              className="mt-1"
-              disabled={!isSubscribed}
-            />
-            {!isSubscribed && (
-              <p className="text-sm text-gray-500 mt-1">
-                Upgrade to Premium to share projects with others
-              </p>
-            )}
-          </div>
+          <EmailSharingInput
+            sharedEmails={sharedEmails}
+            onEmailsChange={setSharedEmails}
+            isSubscribed={isSubscribed}
+          />
 
           <div className="space-y-4">
             <h2 className="text-lg font-semibold text-black">Vendor Information</h2>

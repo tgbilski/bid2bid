@@ -1,17 +1,19 @@
 
-
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
-import { X } from 'lucide-react';
+import { X, UserX } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from '@/hooks/use-toast';
 import Layout from '@/components/Layout';
+import BackButton from '@/components/BackButton';
 
 interface Project {
   id: string;
   name: string;
   created_at: string;
+  is_shared?: boolean;
+  owner_email?: string;
 }
 
 const MyProjects = () => {
@@ -34,20 +36,64 @@ const MyProjects = () => {
 
   const loadProjects = async () => {
     try {
-      const { data, error } = await supabase
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
+
+      // Load owned projects
+      const { data: ownedProjects, error: ownedError } = await supabase
         .from('projects')
         .select('id, name, created_at')
+        .eq('user_id', session.user.id)
         .order('created_at', { ascending: false });
 
-      if (error) {
-        toast({
-          title: "Error",
-          description: "Failed to load projects",
-          variant: "destructive",
-        });
-      } else {
-        setProjects(data || []);
+      if (ownedError) {
+        console.error('Error loading owned projects:', ownedError);
       }
+
+      // Load shared projects
+      const { data: sharedProjects, error: sharedError } = await supabase
+        .from('project_shares')
+        .select(`
+          project_id,
+          projects:project_id (
+            id,
+            name,
+            created_at,
+            user_id
+          )
+        `)
+        .eq('shared_with_email', session.user.email)
+        .order('created_at', { ascending: false });
+
+      if (sharedError) {
+        console.error('Error loading shared projects:', sharedError);
+      }
+
+      // Combine and format projects
+      const allProjects: Project[] = [];
+      
+      // Add owned projects
+      if (ownedProjects) {
+        allProjects.push(...ownedProjects.map(project => ({
+          ...project,
+          is_shared: false
+        })));
+      }
+
+      // Add shared projects
+      if (sharedProjects) {
+        allProjects.push(...sharedProjects.map(share => ({
+          id: share.projects.id,
+          name: share.projects.name,
+          created_at: share.projects.created_at,
+          is_shared: true
+        })));
+      }
+
+      // Sort by created_at
+      allProjects.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+
+      setProjects(allProjects);
     } catch (error) {
       console.error('Error loading projects:', error);
     } finally {
@@ -60,7 +106,7 @@ const MyProjects = () => {
   };
 
   const handleDeleteProject = async (projectId: string, projectName: string, e: React.MouseEvent) => {
-    e.stopPropagation(); // Prevent triggering the project selection
+    e.stopPropagation();
     
     if (!confirm(`Are you sure you want to delete "${projectName}"? This action cannot be undone.`)) {
       return;
@@ -70,6 +116,12 @@ const MyProjects = () => {
       // Delete vendors first (foreign key constraint)
       await supabase
         .from('vendors')
+        .delete()
+        .eq('project_id', projectId);
+
+      // Delete project shares
+      await supabase
+        .from('project_shares')
         .delete()
         .eq('project_id', projectId);
 
@@ -90,7 +142,6 @@ const MyProjects = () => {
           title: "Project Deleted",
           description: `"${projectName}" has been deleted successfully.`,
         });
-        // Refresh the projects list
         await loadProjects();
       }
     } catch (error) {
@@ -103,19 +154,64 @@ const MyProjects = () => {
     }
   };
 
+  const handleRemoveSharedProject = async (projectId: string, projectName: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    
+    if (!confirm(`Are you sure you want to remove "${projectName}" from your shared projects?`)) {
+      return;
+    }
+
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
+
+      const { error } = await supabase
+        .from('project_shares')
+        .delete()
+        .eq('project_id', projectId)
+        .eq('shared_with_email', session.user.email);
+
+      if (error) {
+        toast({
+          title: "Error",
+          description: "Failed to remove shared project",
+          variant: "destructive",
+        });
+      } else {
+        toast({
+          title: "Project Removed",
+          description: `"${projectName}" has been removed from your shared projects.`,
+        });
+        await loadProjects();
+      }
+    } catch (error) {
+      console.error('Error removing shared project:', error);
+      toast({
+        title: "Error",
+        description: "Failed to remove shared project",
+        variant: "destructive",
+      });
+    }
+  };
+
   if (isLoading) {
     return (
-      <Layout showLogoNavigation={true}>
-        <div className="max-w-md mx-auto mt-8 text-center">
-          <p className="text-gray-500">Loading projects...</p>
+      <Layout showLogoNavigation={false}>
+        <div className="max-w-md mx-auto mt-8">
+          <BackButton />
+          <div className="text-center">
+            <p className="text-gray-500">Loading projects...</p>
+          </div>
         </div>
       </Layout>
     );
   }
 
   return (
-    <Layout showLogoNavigation={true}>
+    <Layout showLogoNavigation={false}>
       <div className="max-w-md mx-auto mt-8">
+        <BackButton />
+        
         <div className="text-center mb-8">
           <h1 className="text-2xl font-bold text-black mb-2">My Projects</h1>
           <p className="text-gray-600">Select a project to view or edit</p>
@@ -144,19 +240,37 @@ const MyProjects = () => {
                   className="w-full block h-14 text-left justify-start rounded-[10px] border-2 border-gray-200 hover:border-black hover:bg-gray-50 pr-12"
                 >
                   <div>
-                    <div className="font-semibold text-black">{project.name}</div>
+                    <div className="flex items-center gap-2">
+                      <span className="font-semibold text-black">{project.name}</span>
+                      {project.is_shared && (
+                        <span className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded">
+                          Shared
+                        </span>
+                      )}
+                    </div>
                     <div className="text-sm text-gray-500">
                       Created: {new Date(project.created_at).toLocaleDateString()}
                     </div>
                   </div>
                 </Button>
-                <button
-                  onClick={(e) => handleDeleteProject(project.id, project.name, e)}
-                  className="absolute right-3 top-1/2 transform -translate-y-1/2 p-1 hover:bg-red-100 rounded-full transition-colors"
-                  title="Delete project"
-                >
-                  <X size={16} className="text-red-500 hover:text-red-700" />
-                </button>
+                
+                {project.is_shared ? (
+                  <button
+                    onClick={(e) => handleRemoveSharedProject(project.id, project.name, e)}
+                    className="absolute right-3 top-1/2 transform -translate-y-1/2 p-1 hover:bg-blue-100 rounded-full transition-colors"
+                    title="Remove from shared projects"
+                  >
+                    <UserX size={16} className="text-blue-500 hover:text-blue-700" />
+                  </button>
+                ) : (
+                  <button
+                    onClick={(e) => handleDeleteProject(project.id, project.name, e)}
+                    className="absolute right-3 top-1/2 transform -translate-y-1/2 p-1 hover:bg-red-100 rounded-full transition-colors"
+                    title="Delete project"
+                  >
+                    <X size={16} className="text-red-500 hover:text-red-700" />
+                  </button>
+                )}
               </div>
             ))
           )}
@@ -167,4 +281,3 @@ const MyProjects = () => {
 };
 
 export default MyProjects;
-

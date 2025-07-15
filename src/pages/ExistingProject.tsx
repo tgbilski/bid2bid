@@ -8,6 +8,8 @@ import { Plus } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import Layout from '@/components/Layout';
+import BackButton from '@/components/BackButton';
+import EmailSharingInput from '@/components/EmailSharingInput';
 import VendorCard, { VendorData } from '@/components/VendorCard';
 
 interface Project {
@@ -22,7 +24,7 @@ const ExistingProject = () => {
   const navigate = useNavigate();
   const [project, setProject] = useState<Project | null>(null);
   const [projectName, setProjectName] = useState('');
-  const [sharedEmail, setSharedEmail] = useState('');
+  const [sharedEmails, setSharedEmails] = useState<string[]>([]);
   const [vendors, setVendors] = useState<VendorData[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isSubscribed, setIsSubscribed] = useState(false);
@@ -82,8 +84,15 @@ const ExistingProject = () => {
       setProject(projectData);
       setProjectName(projectData.name);
 
-      // Note: Project sharing functionality temporarily disabled due to TypeScript issues
-      // Will be re-enabled once database types are properly regenerated
+      // Load existing share info
+      const { data: shareData } = await supabase
+        .from('project_shares')
+        .select('shared_with_email')
+        .eq('project_id', projectId);
+
+      if (shareData && shareData.length > 0) {
+        setSharedEmails(shareData.map(share => share.shared_with_email));
+      }
 
       // Load vendors
       const { data: vendorData, error: vendorError } = await supabase
@@ -176,7 +185,7 @@ const ExistingProject = () => {
       return;
     }
 
-    if (sharedEmail && !isSubscribed) {
+    if (sharedEmails.length > 0 && !isSubscribed) {
       toast({
         title: "Premium Feature",
         description: "Project sharing is only available with a Premium subscription.",
@@ -234,19 +243,44 @@ const ExistingProject = () => {
         }
       }
 
-      // Note: Project sharing functionality temporarily disabled due to TypeScript issues
-      // Will be re-enabled once database types are properly regenerated
-      if (sharedEmail && isSubscribed) {
-        toast({
-          title: "Project Updated",
-          description: "Project updated successfully. Sharing functionality will be available soon.",
-        });
-      } else {
-        toast({
-          title: "Project Updated!",
-          description: "Your project has been updated successfully.",
-        });
+      // Handle project sharing
+      if (isSubscribed) {
+        // Delete existing shares
+        await supabase
+          .from('project_shares')
+          .delete()
+          .eq('project_id', project.id);
+
+        // Add new shares if emails provided
+        if (sharedEmails.length > 0) {
+          const shareInserts = sharedEmails.map(email => ({
+            project_id: project.id,
+            owner_id: session.user.id,
+            shared_with_email: email
+          }));
+
+          const { error: shareError } = await supabase
+            .from('project_shares')
+            .insert(shareInserts);
+
+          if (shareError) {
+            console.error('Error sharing project:', shareError);
+            toast({
+              title: "Project Updated",
+              description: "Project updated but failed to share with some emails.",
+              variant: "destructive",
+            });
+            return;
+          }
+        }
       }
+
+      toast({
+        title: "Project Updated!",
+        description: sharedEmails.length > 0 && isSubscribed ? 
+          `Your project has been updated and shared with ${sharedEmails.length} recipient(s).` : 
+          "Your project has been updated successfully.",
+      });
     } catch (error) {
       console.error('Error updating project:', error);
       toast({
@@ -259,9 +293,12 @@ const ExistingProject = () => {
 
   if (isLoading) {
     return (
-      <Layout showLogoNavigation={true}>
-        <div className="max-w-md mx-auto mt-8 text-center">
-          <p className="text-gray-500">Loading project...</p>
+      <Layout showLogoNavigation={false}>
+        <div className="max-w-md mx-auto mt-8">
+          <BackButton />
+          <div className="text-center">
+            <p className="text-gray-500">Loading project...</p>
+          </div>
         </div>
       </Layout>
     );
@@ -269,17 +306,22 @@ const ExistingProject = () => {
 
   if (!project) {
     return (
-      <Layout showLogoNavigation={true}>
-        <div className="max-w-md mx-auto mt-8 text-center">
-          <p className="text-gray-500">Project not found</p>
+      <Layout showLogoNavigation={false}>
+        <div className="max-w-md mx-auto mt-8">
+          <BackButton />
+          <div className="text-center">
+            <p className="text-gray-500">Project not found</p>
+          </div>
         </div>
       </Layout>
     );
   }
 
   return (
-    <Layout showLogoNavigation={true}>
+    <Layout showLogoNavigation={false}>
       <div className="max-w-md mx-auto mt-8 pb-8">
+        <BackButton />
+        
         <div className="text-center mb-8">
           <h1 className="text-2xl font-bold text-black mb-2">Edit Project</h1>
           <p className="text-gray-600">Modify your existing project</p>
@@ -299,25 +341,11 @@ const ExistingProject = () => {
             />
           </div>
 
-          <div>
-            <Label htmlFor="shared-email" className="text-black">
-              Share with Email {!isSubscribed && <span className="text-sm text-gray-500">(Premium Feature)</span>}
-            </Label>
-            <Input
-              id="shared-email"
-              type="email"
-              value={sharedEmail}
-              onChange={(e) => setSharedEmail(e.target.value)}
-              placeholder={isSubscribed ? "Enter email to share project" : "Upgrade to Premium to share projects"}
-              className="mt-1"
-              disabled={!isSubscribed}
-            />
-            {!isSubscribed && (
-              <p className="text-sm text-gray-500 mt-1">
-                Upgrade to Premium to share projects with others
-              </p>
-            )}
-          </div>
+          <EmailSharingInput
+            sharedEmails={sharedEmails}
+            onEmailsChange={setSharedEmails}
+            isSubscribed={isSubscribed}
+          />
 
           <div className="space-y-4">
             <h2 className="text-lg font-semibold text-black">Vendor Information</h2>
