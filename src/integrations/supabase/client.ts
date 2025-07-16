@@ -1,20 +1,18 @@
-// src/lib/supabaseClient.ts (Example for Next.js - RECOMMENDED APPROACH)
+// src/integrations/supabase/client.ts
 
 import { createClient } from '@supabase/supabase-js';
 
-// Get environment variables.
-// These variables MUST be prefixed with NEXT_PUBLIC_ for client-side access in Next.js
-// If using another framework, adjust the prefix (e.g., REACT_APP_, VITE_)
-const supabaseUrl = import.meta.env.VITE_PUBLIC_SUPABASE_URL;
-const supabaseAnonKey = import.meta.env.VITE_PUBLIC_SUPABASE_ANON_KEY; // This typically holds your publishable key
+// Get environment variables for Vite.
+// These variables MUST be prefixed with VITE_ for client-side access in Vite.
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL; // Corrected prefix
+const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY; // Corrected prefix
 
 // Basic validation (optional, but good for debugging)
 if (!supabaseUrl) {
-  console.error("Missing NEXT_PUBLIC_SUPABASE_URL environment variable!");
-  // Consider throwing an error or handling this more gracefully in a real app
+  console.error("Missing VITE_SUPABASE_URL environment variable!"); // Corrected message
 }
 if (!supabaseAnonKey) {
-  console.error("Missing NEXT_PUBLIC_SUPABASE_ANON_KEY environment variable!");
+  console.error("Missing VITE_SUPABASE_ANON_KEY environment variable!"); // Corrected message
 }
 
 export const supabase = createClient(supabaseUrl as string, supabaseAnonKey as string);
