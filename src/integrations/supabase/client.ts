@@ -5,8 +5,8 @@ import { createClient } from '@supabase/supabase-js';
 // Get environment variables.
 // These variables MUST be prefixed with NEXT_PUBLIC_ for client-side access in Next.js
 // If using another framework, adjust the prefix (e.g., REACT_APP_, VITE_)
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY; // This typically holds your publishable key
+const supabaseUrl = import.meta.env.VITE_PUBLIC_SUPABASE_URL;
+const supabaseAnonKey = import.meta.env.VITE_PUBLIC_SUPABASE_ANON_KEY; // This typically holds your publishable key
 
 // Basic validation (optional, but good for debugging)
 if (!supabaseUrl) {
