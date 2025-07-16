@@ -14,6 +14,30 @@ export type Database = {
   }
   public: {
     Tables: {
+      project_shares: {
+        Row: {
+          created_at: string
+          id: number
+          owner_id: string | null
+          project_id: string | null
+          shared_with_email: string | null
+        }
+        Insert: {
+          created_at?: string
+          id?: number
+          owner_id?: string | null
+          project_id?: string | null
+          shared_with_email?: string | null
+        }
+        Update: {
+          created_at?: string
+          id?: number
+          owner_id?: string | null
+          project_id?: string | null
+          shared_with_email?: string | null
+        }
+        Relationships: []
+      }
       projects: {
         Row: {
           created_at: string
