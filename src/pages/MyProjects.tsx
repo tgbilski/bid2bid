@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
@@ -73,9 +72,9 @@ const MyProjects = () => {
         })));
       }
 
-      // Add shared projects
+      // Add shared projects - fix the array access issue
       if (sharedProjectData) {
-        allProjects.push(...sharedProjectData.map(share => ({
+        allProjects.push(...sharedProjectData.map((share: any) => ({
           id: share.projects.id,
           name: share.projects.name,
           created_at: share.projects.created_at,
