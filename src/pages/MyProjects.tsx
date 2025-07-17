@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
@@ -50,12 +49,12 @@ const MyProjects = () => {
         console.error('Error loading owned projects:', ownedError);
       }
 
-      // Load shared projects
+      // Load shared projects - fix the query structure
       const { data: sharedProjectData, error: sharedError } = await supabase
         .from('project_shares')
         .select(`
           project_id,
-          projects!inner(id, name, created_at)
+          projects(id, name, created_at)
         `)
         .eq('shared_with_email', session.user.email);
 
@@ -73,14 +72,16 @@ const MyProjects = () => {
         })));
       }
 
-      // Add shared projects - handle the nested structure properly
-      if (sharedProjectData && Array.isArray(sharedProjectData)) {
-        sharedProjectData.forEach((share: any) => {
-          if (share.projects && typeof share.projects === 'object') {
+      // Add shared projects - handle the response correctly
+      if (sharedProjectData) {
+        sharedProjectData.forEach((share) => {
+          // Handle the case where projects might be null or an object
+          const project = share.projects;
+          if (project && typeof project === 'object' && !Array.isArray(project)) {
             allProjects.push({
-              id: share.projects.id,
-              name: share.projects.name,
-              created_at: share.projects.created_at,
+              id: project.id,
+              name: project.name,
+              created_at: project.created_at,
               is_shared: true
             });
           }
