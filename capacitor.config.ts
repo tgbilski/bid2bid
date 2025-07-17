@@ -2,7 +2,7 @@
 import { CapacitorConfig } from '@capacitor/cli';
 
 const config: CapacitorConfig = {
-  appId: 'app.lovable.737599d9a4e34b3ea7d4dc510c5dbfee',
+  appId: 'io.bid2bid.app',
   appName: 'Bid2Bid',
   webDir: 'dist',
   server: {
