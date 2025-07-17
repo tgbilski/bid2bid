@@ -1,3 +1,4 @@
+
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
@@ -72,14 +73,18 @@ const MyProjects = () => {
         })));
       }
 
-      // Add shared projects - fix the array access issue
-      if (sharedProjectData) {
-        allProjects.push(...sharedProjectData.map((share: any) => ({
-          id: share.projects.id,
-          name: share.projects.name,
-          created_at: share.projects.created_at,
-          is_shared: true
-        })));
+      // Add shared projects - handle the nested structure properly
+      if (sharedProjectData && Array.isArray(sharedProjectData)) {
+        sharedProjectData.forEach((share: any) => {
+          if (share.projects && typeof share.projects === 'object') {
+            allProjects.push({
+              id: share.projects.id,
+              name: share.projects.name,
+              created_at: share.projects.created_at,
+              is_shared: true
+            });
+          }
+        });
       }
 
       // Sort by created_at
