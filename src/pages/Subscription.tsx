@@ -1,64 +1,75 @@
-import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Check, Crown } from 'lucide-react';
-import { supabase } from '@/integrations/supabase/client';
-import Layout from '@/components/Layout';
+import React, { useEffect, useState } from 'react';
+import { View, Text, Button, ActivityIndicator, Alert, ScrollView } from 'react-native';
+import * as RNIap from 'react-native-iap';
 
-interface SubscriptionData {
-  subscribed: boolean;
-  subscription_tier?: string;
-  subscription_end?: string;
-}
+const productIds = ['io.bid2bid.app.premium.monthly']; // Your App Store subscription product ID
 
-const Subscription = () => {
-  const [subscriptionData, setSubscriptionData] = useState<SubscriptionData>({ subscribed: false });
+const Subscription = ({ navigation }) => {
+  const [products, setProducts] = useState<RNIap.Product[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const navigate = useNavigate();
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [isSubscribed, setIsSubscribed] = useState(false);
+  const [subscriptionEnd, setSubscriptionEnd] = useState<string | undefined>(undefined);
 
   useEffect(() => {
-    checkAuth();
+    RNIap.initConnection().then(() => {
+      fetchProducts();
+      checkSubscription();
+    });
+    return () => {
+      RNIap.endConnection();
+    };
   }, []);
 
-  const checkAuth = async () => {
-    const { data: { session } } = await supabase.auth.getSession();
-    if (!session) {
-      navigate('/login');
-      return;
+  const fetchProducts = async () => {
+    try {
+      const items = await RNIap.getSubscriptions(productIds);
+      setProducts(items);
+    } catch (err) {
+      Alert.alert('Error', 'Could not load products');
     }
-    await checkSubscription();
+    setIsLoading(false);
   };
 
-  // Simulate subscription check. Replace with your backend Apple receipt check if needed.
   const checkSubscription = async () => {
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) return;
-
-      // Replace with your backend logic if you validate Apple subscriptions server-side
-      setSubscriptionData({
-        subscribed: false, // Or set based on your real subscription data
-        subscription_tier: undefined,
-        subscription_end: undefined,
-      });
-    } catch (error) {
-      console.error('Error checking subscription:', error);
-    } finally {
-      setIsLoading(false);
+      const purchases = await RNIap.getAvailablePurchases();
+      const activeSub = purchases.find(p => productIds.includes(p.productId));
+      setIsSubscribed(!!activeSub);
+      if (activeSub && activeSub.transactionDate) {
+        // For demo: fake expiration 30 days after purchase
+        const ms = Number(activeSub.transactionDate) + 30 * 24 * 60 * 60 * 1000;
+        setSubscriptionEnd(new Date(ms).toLocaleDateString());
+      }
+    } catch (err) {
+      // No subscription found
     }
   };
 
-  const openAppleManageUrl = () => {
-    window.open('https://apps.apple.com/account/subscriptions', '_blank');
+  const handleSubscribe = async (productId: string) => {
+    setIsProcessing(true);
+    try {
+      await RNIap.requestSubscription(productId);
+      await checkSubscription();
+    } catch (err: any) {
+      Alert.alert('Error', err.message || 'Purchase failed');
+    }
+    setIsProcessing(false);
   };
 
   const handleContinue = () => {
-    navigate('/home');
+    navigation.navigate('Home');
+  };
+
+  const handleManage = () => {
+    RNIap.deepLinkToSubscriptions();
   };
 
   if (isLoading) {
     return (
-      <Layout showLogoNavigation={false}>
-        <div className="max-w-md mx-auto
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+        <ActivityIndicator size="large" />
+        <Text>Loading...</Text>
+      </View>
+   *
 
