@@ -6,7 +6,7 @@ const config: CapacitorConfig = {
   appName: 'Bid2Bid',
   webDir: 'dist',
   server: {
-    url: 'https://737599d9-a4e3-4b3e-a7d4-dc510c5dbfee.lovableproject.com?forceHideBadge=true',
+    url: 'app.bid2bid.io',
     cleartext: true
   },
   bundledWebRuntime: false
