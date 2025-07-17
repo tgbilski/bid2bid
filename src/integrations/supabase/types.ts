@@ -18,23 +18,23 @@ export type Database = {
         Row: {
           created_at: string
           id: number
-          owner_id: string | null
-          project_id: string | null
-          shared_with_email: string | null
+          owner_id: string
+          project_id: string
+          shared_with_email: string
         }
         Insert: {
           created_at?: string
           id?: number
-          owner_id?: string | null
-          project_id?: string | null
-          shared_with_email?: string | null
+          owner_id?: string
+          project_id?: string
+          shared_with_email: string
         }
         Update: {
           created_at?: string
           id?: number
-          owner_id?: string | null
-          project_id?: string | null
-          shared_with_email?: string | null
+          owner_id?: string
+          project_id?: string
+          shared_with_email?: string
         }
         Relationships: []
       }
