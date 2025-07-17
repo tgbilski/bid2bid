@@ -1,3 +1,4 @@
+
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
@@ -257,7 +258,8 @@ const ExistingProject = () => {
           const shareInserts = sharedEmails.map(email => ({
             project_id: project.id,
             owner_id: session.user.id,
-            shared_with_email: email
+            shared_with_email: email,
+            permission_level: 'view'
           }));
 
           const { error: shareError } = await supabase

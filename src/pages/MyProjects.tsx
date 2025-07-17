@@ -50,12 +50,16 @@ const MyProjects = () => {
         console.error('Error loading owned projects:', ownedError);
       }
 
-      // Load shared projects with explicit typing
+      // Load shared projects
       const { data: sharedProjectData, error: sharedError } = await supabase
         .from('project_shares')
         .select(`
           project_id,
-          projects!inner(id, name, created_at)
+          projects!inner (
+            id,
+            name,
+            created_at
+          )
         `)
         .eq('shared_with_email', session.user.email);
 
@@ -73,11 +77,11 @@ const MyProjects = () => {
         })));
       }
 
-      // Add shared projects with proper type handling
+      // Add shared projects
       if (sharedProjectData) {
         sharedProjectData.forEach((share: any) => {
           const project = share.projects;
-          if (project && typeof project === 'object') {
+          if (project) {
             allProjects.push({
               id: project.id,
               name: project.name,

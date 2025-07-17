@@ -17,26 +17,40 @@ export type Database = {
       project_shares: {
         Row: {
           created_at: string
-          id: number
+          id: string
           owner_id: string
+          permission_level: string | null
           project_id: string
           shared_with_email: string
+          updated_at: string
         }
         Insert: {
           created_at?: string
-          id?: number
-          owner_id?: string
-          project_id?: string
+          id?: string
+          owner_id: string
+          permission_level?: string | null
+          project_id: string
           shared_with_email: string
+          updated_at?: string
         }
         Update: {
           created_at?: string
-          id?: number
+          id?: string
           owner_id?: string
+          permission_level?: string | null
           project_id?: string
           shared_with_email?: string
+          updated_at?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "project_shares_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       projects: {
         Row: {
