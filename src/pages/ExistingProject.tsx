@@ -18,6 +18,9 @@ interface Project {
   name: string;
   created_at: string;
   updated_at: string;
+  // IMPORTANT: Ensure your project data also loads the user_id or owner_id from the DB
+  // This is critical for RLS checks. Adjust the type based on your actual column name.
+  user_id: string; // Or owner_id: string; if that's what your DB uses
 }
 
 const ExistingProject = () => {
@@ -35,6 +38,7 @@ const ExistingProject = () => {
     const checkAuthAndLoadProject = async () => {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) {
+        console.log("No session found during initial load, navigating to login.");
         navigate('/login');
         return;
       }
@@ -43,7 +47,7 @@ const ExistingProject = () => {
     };
 
     checkAuthAndLoadProject();
-  }, [projectId, navigate]);
+  }, [projectId, navigate]); // Added navigate to dependency array
 
   const checkSubscription = async () => {
     try {
@@ -58,6 +62,8 @@ const ExistingProject = () => {
 
       if (!error && data) {
         setIsSubscribed(data.subscribed || false);
+      } else if (error) {
+        console.error('Error from check-subscription function:', error);
       }
     } catch (error) {
       console.error('Error checking subscription:', error);
@@ -71,14 +77,17 @@ const ExistingProject = () => {
 
   const loadProject = async () => {
     try {
+      // Ensure 'user_id' (or 'owner_id') is selected here
       const { data: projectData, error: projectError } = await supabase
         .from('projects')
-        .select('*')
+        .select('*, user_id') // Make sure 'user_id' is explicitly selected
+        // Or if your column is named owner_id: .select('*, owner_id')
         .eq('id', projectId)
         .single();
 
       if (projectError || !projectData) {
-        showSuccess("The requested project could not be found.");
+        console.error('Error loading project data:', projectError);
+        showSuccess("The requested project could not be found or you don't have access.");
         navigate('/my-projects');
         return;
       }
@@ -131,7 +140,7 @@ const ExistingProject = () => {
         addVendor();
       }
     } catch (error) {
-      console.error('Error loading project:', error);
+      console.error('Caught unexpected error in loadProject:', error);
       showSuccess("Failed to load project"); // Using useSuccessMessage for top-level messages
     } finally {
       setIsLoading(false);
@@ -177,6 +186,7 @@ const ExistingProject = () => {
     try {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) {
+        console.log("No session found during handleFavorite, navigating to login.");
         navigate('/login');
         return;
       }
@@ -197,7 +207,7 @@ const ExistingProject = () => {
         .eq('id', id);
 
       if (error) {
-        console.error('Error updating favorite status:', error);
+        console.error('Error updating favorite status in DB:', error);
         toast({
           title: "Error",
           description: "Failed to update favorite status in database.",
@@ -214,7 +224,7 @@ const ExistingProject = () => {
         });
       }
     } catch (error) {
-      console.error('Error handling favorite:', error);
+      console.error('Caught unexpected error handling favorite:', error);
       toast({
         title: "Error",
         description: "An unexpected error occurred while updating favorite status.",
@@ -259,7 +269,7 @@ const ExistingProject = () => {
           });
         }
       } catch (error) {
-        console.error('Error deleting vendor:', error);
+        console.error('Caught unexpected error deleting vendor:', error);
         toast({
           title: "Error",
           description: "An unexpected error occurred while deleting vendor.",
@@ -296,9 +306,18 @@ const ExistingProject = () => {
     try {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) {
+        console.log("No session found during saveProject, navigating to login.");
         navigate('/login');
         return;
       }
+
+      // --- DEBUGGING LOGS START ---
+      console.log("--- SAVE PROJECT DEBUGGING ---");
+      console.log("Current Session User ID:", session.user.id);
+      console.log("Project ID being saved:", project.id);
+      // Ensure 'project.user_id' exists in your Project interface and is fetched by loadProject
+      console.log("Project Owner ID (from loaded project state):", project.user_id);
+      // --- DEBUGGING LOGS END ---
 
       // 1. Update project name
       const { error: projectError } = await supabase
@@ -335,9 +354,14 @@ const ExistingProject = () => {
 
       // 3. Use upsert to insert new vendors and update existing ones
       // 'onConflict: 'id'' tells Supabase to update if an ID matches, otherwise insert.
-      const { error: vendorUpsertError } = await supabase
+      const { error: vendorUpsertError, data: upsertedVendorData } = await supabase
         .from('vendors')
         .upsert(vendorsToUpsert, { onConflict: 'id' });
+
+      // --- DEBUGGING LOGS START ---
+      console.log("Vendor Upsert Supabase Error Object:", vendorUpsertError);
+      console.log("Vendor Upsert Supabase Data Object (returned from Supabase):", upsertedVendorData);
+      // --- DEBUGGING LOGS END ---
 
       if (vendorUpsertError) {
         console.error('Error saving vendors:', vendorUpsertError);
@@ -385,10 +409,11 @@ const ExistingProject = () => {
 
       // After successful save, reload the project to get the actual IDs for new vendors
       // and ensure the local state is fully synchronized with the database.
+      // This is crucial if you rely on database-generated IDs for new vendors.
       await loadProject();
 
     } catch (error) {
-      console.error('Error updating project:', error);
+      console.error('Caught unexpected error updating project:', error);
       toast({
         title: "Error",
         description: "Failed to update project",
