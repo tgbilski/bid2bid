@@ -1,133 +1,244 @@
+
 import React, { useEffect, useState } from 'react';
-import { View, Text, Button, ActivityIndicator, Alert, ScrollView } from 'react-native';
-import * as RNIap from 'react-native-iap';
+import { useNavigate } from 'react-router-dom';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Crown, ArrowLeft } from 'lucide-react';
+import { supabase } from '@/integrations/supabase/client';
+import Layout from '@/components/Layout';
 
-// Replace below with your real App Store Connect product ID for the subscription, NOT an Apple ID!
-const productIds = ['io.bid2bid.app.premium.monthly']; // Use your correct product ID here
+interface SubscriptionData {
+  subscribed: boolean;
+  subscription_tier?: string;
+  subscription_end?: string;
+}
 
-const ManageSubscription = ({ navigation }) => {
-  const [products, setProducts] = useState<RNIap.Product[]>([]);
+const ManageSubscription = () => {
+  const [subscriptionData, setSubscriptionData] = useState<SubscriptionData>({ subscribed: false });
   const [isLoading, setIsLoading] = useState(true);
-  const [isProcessing, setIsProcessing] = useState(false);
-  const [isSubscribed, setIsSubscribed] = useState(false);
-  const [subscriptionEnd, setSubscriptionEnd] = useState<string | undefined>(undefined);
+  const navigate = useNavigate();
 
   useEffect(() => {
-    RNIap.initConnection().then(() => {
-      fetchProducts();
-      checkSubscription();
-    });
-    return () => {
-      RNIap.endConnection();
-    };
+    checkAuth();
   }, []);
 
-  const fetchProducts = async () => {
-    try {
-      const items = await RNIap.getSubscriptions(productIds);
-      setProducts(items);
-    } catch (err) {
-      Alert.alert('Error', 'Could not load products');
+  const checkAuth = async () => {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) {
+      navigate('/login');
+      return;
     }
-    setIsLoading(false);
+    await checkSubscription();
   };
 
   const checkSubscription = async () => {
     try {
-      const purchases = await RNIap.getAvailablePurchases();
-      const activeSub = purchases.find(p => productIds.includes(p.productId));
-      setIsSubscribed(!!activeSub);
-      if (activeSub && activeSub.transactionDate) {
-        // Demo: Set a dummy expiration 30 days after purchase (replace with backend validation for production)
-        const ms = Number(activeSub.transactionDate) + 30 * 24 * 60 * 60 * 1000;
-        setSubscriptionEnd(new Date(ms).toLocaleDateString());
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
+
+      const { data, error } = await supabase.functions.invoke('check-subscription', {
+        headers: {
+          Authorization: `Bearer ${session.access_token}`,
+        },
+      });
+
+      if (!error && data) {
+        setSubscriptionData({
+          subscribed: data.subscribed || false,
+          subscription_tier: data.subscription_tier,
+          subscription_end: data.subscription_end,
+        });
       }
-    } catch (err) {
-      // Ignore, just means no subscription
+    } catch (error) {
+      console.error('Error checking subscription:', error);
+    } finally {
+      setIsLoading(false);
     }
   };
 
-  const handleSubscribe = async (productId: string) => {
-    setIsProcessing(true);
+  const openCustomerPortal = async () => {
     try {
-      await RNIap.requestSubscription(productId);
-      await checkSubscription();
-    } catch (err: any) {
-      Alert.alert('Error', err.message || 'Purchase failed');
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        navigate('/login');
+        return;
+      }
+
+      const { data, error } = await supabase.functions.invoke('customer-portal', {
+        headers: {
+          Authorization: `Bearer ${session.access_token}`,
+        },
+      });
+
+      if (error) throw error;
+
+      if (data?.url) {
+        window.open(data.url, '_blank');
+      }
+    } catch (error) {
+      console.error('Error opening customer portal:', error);
     }
-    setIsProcessing(false);
   };
 
-  const handleManage = () => {
-    RNIap.deepLinkToSubscriptions();
+  const createCheckout = async () => {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        navigate('/login');
+        return;
+      }
+
+      const { data, error } = await supabase.functions.invoke('create-checkout', {
+        headers: {
+          Authorization: `Bearer ${session.access_token}`,
+        },
+      });
+
+      if (error) throw error;
+
+      if (data?.url) {
+        window.open(data.url, '_blank');
+      }
+    } catch (error) {
+      console.error('Error creating checkout:', error);
+    }
   };
 
   if (isLoading) {
     return (
-      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
-        <ActivityIndicator size="large" />
-        <Text>Loading...</Text>
-      </View>
+      <Layout showLogoNavigation={false}>
+        <div className="max-w-md mx-auto mt-8">
+          <div className="text-center">
+            <p className="text-gray-500">Loading subscription details...</p>
+          </div>
+        </div>
+      </Layout>
     );
   }
 
   return (
-    <ScrollView contentContainerStyle={{ flexGrow: 1, padding: 16 }}>
-      <Button title="Back" onPress={() => navigation.goBack()} />
-      <View style={{ alignItems: 'center', marginVertical: 24 }}>
-        <Text style={{ fontSize: 24, fontWeight: 'bold' }}>Manage Subscription</Text>
-        <Text style={{ color: '#555' }}>View and manage your subscription plan</Text>
-      </View>
+    <Layout showLogoNavigation={false}>
+      <div className="max-w-md mx-auto mt-8 space-y-6">
+        <div className="flex items-center gap-4 mb-8">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => navigate('/home')}
+            className="flex items-center gap-2"
+          >
+            <ArrowLeft className="h-4 w-4" />
+            Back
+          </Button>
+        </div>
 
-      <View style={{ borderWidth: 1, borderColor: '#ccc', borderRadius: 10, padding: 16, marginBottom: 24 }}>
-        <Text style={{ fontWeight: 'bold', fontSize: 18 }}>
-          {isSubscribed ? 'Premium Plan' : 'Free Plan'}
-        </Text>
-        <Text style={{ color: '#888' }}>
-          {isSubscribed ? 'You have access to all premium features' : 'Limited features available'}
-        </Text>
-        <View style={{ alignItems: 'center', marginVertical: 12 }}>
-          <Text style={{ fontSize: 28, fontWeight: 'bold' }}>
-            {isSubscribed ? (products[0]?.localizedPrice ?? '$2.99') : '$0'}
-          </Text>
-          <Text style={{ color: '#888' }}>/month</Text>
-        </View>
-        {isSubscribed && subscriptionEnd && (
-          <Text style={{ textAlign: 'center', color: '#999' }}>
-            Active until {subscriptionEnd}
-          </Text>
+        <div className="text-center mb-8">
+          <h1 className="text-2xl font-bold text-black mb-2">Manage Subscription</h1>
+          <p className="text-gray-600">View and manage your subscription plan</p>
+        </div>
+
+        {subscriptionData.subscribed ? (
+          <Card className="border-green-200 bg-green-50">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-green-800">
+                <Crown className="h-5 w-5" />
+                Premium Plan
+              </CardTitle>
+              <CardDescription className="text-green-600">
+                You have access to all premium features
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="text-center">
+                <div className="text-3xl font-bold text-green-800 mb-2">
+                  Active Subscription
+                </div>
+                <p className="text-sm text-green-600">
+                  Billing managed through your platform's app store
+                </p>
+              </div>
+              
+              {subscriptionData.subscription_end && (
+                <p className="text-center text-green-700 text-sm">
+                  Active until {new Date(subscriptionData.subscription_end).toLocaleDateString()}
+                </p>
+              )}
+
+              <div className="space-y-2">
+                <Button
+                  onClick={openCustomerPortal}
+                  variant="outline"
+                  className="w-full"
+                >
+                  Manage Subscription
+                </Button>
+                <p className="text-xs text-center text-gray-600">
+                  To manage or cancel your subscription, use your platform's app store settings
+                </p>
+              </div>
+            </CardContent>
+          </Card>
+        ) : (
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Crown className="h-5 w-5 text-yellow-500" />
+                Free Plan
+              </CardTitle>
+              <CardDescription>
+                Limited features available
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="text-center">
+                <div className="text-3xl font-bold text-black mb-2">$0</div>
+                <p className="text-sm text-gray-600">/month</p>
+              </div>
+
+              <div className="space-y-2">
+                <Button
+                  onClick={createCheckout}
+                  className="w-full bg-black text-white hover:bg-gray-800"
+                >
+                  Upgrade to Premium
+                </Button>
+                <p className="text-xs text-center text-gray-600">
+                  Subscriptions are handled via your platform's app store
+                </p>
+              </div>
+            </CardContent>
+          </Card>
         )}
-        <View style={{ marginTop: 16 }}>
-          {isSubscribed ? (
-            <Button title="Manage on Apple App Store" onPress={handleManage} />
-          ) : (
-            <Button
-              title={isProcessing ? 'Processing...' : 'Upgrade to Premium'}
-              onPress={() => handleSubscribe(products[0]?.productId)}
-              disabled={isProcessing || !products.length}
-            />
-          )}
-          <Text style={{ fontSize: 12, textAlign: 'center', color: '#888', marginTop: 8 }}>
-            {isSubscribed
-              ? 'To manage or cancel your subscription, tap above to open your Apple subscriptions.'
-              : 'Subscriptions are handled via the Apple App Store.'}
-          </Text>
-        </View>
-      </View>
 
-      {/* Features Comparison */}
-      <View style={{ borderWidth: 1, borderColor: '#ccc', borderRadius: 10, padding: 16 }}>
-        <Text style={{ fontWeight: 'bold', fontSize: 18, marginBottom: 8 }}>Plan Features</Text>
-        <Text>✓ Unlimited projects</Text>
-        <Text>✓ Up to 10 vendors per project</Text>
-        <Text>
-          {isSubscribed ? '✓' : '✗'} Project sharing
-        </Text>
-        <Text>
-          {isSubscribed ? '✓' : '✗'} Collaborative bidding
-        </Text>
-      </View>
-    </ScrollView>
+        {/* Features Comparison */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-lg">Plan Features</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            <div className="flex items-center gap-2">
+              <span className="text-green-600">✓</span>
+              <span className="text-sm">Unlimited projects</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-green-600">✓</span>
+              <span className="text-sm">Up to 10 vendors per project</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className={subscriptionData.subscribed ? "text-green-600" : "text-red-500"}>
+                {subscriptionData.subscribed ? '✓' : '✗'}
+              </span>
+              <span className="text-sm">Project sharing</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className={subscriptionData.subscribed ? "text-green-600" : "text-red-500"}>
+                {subscriptionData.subscribed ? '✓' : '✗'}
+              </span>
+              <span className="text-sm">Collaborative bidding</span>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    </Layout>
   );
 };
 
