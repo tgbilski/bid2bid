@@ -10,9 +10,11 @@ interface EmailSharingInputProps {
   sharedEmails: string[];
   onEmailsChange: (emails: string[]) => void;
   isSubscribed: boolean;
+  onSave?: () => Promise<void>;
+  disabled?: boolean;
 }
 
-const EmailSharingInput = ({ sharedEmails, onEmailsChange, isSubscribed }: EmailSharingInputProps) => {
+const EmailSharingInput = ({ sharedEmails, onEmailsChange, isSubscribed, onSave, disabled = false }: EmailSharingInputProps) => {
   const [currentEmail, setCurrentEmail] = useState('');
 
   const addEmail = () => {

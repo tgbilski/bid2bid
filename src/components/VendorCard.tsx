@@ -24,9 +24,10 @@ interface VendorCardProps {
   onFavorite: (id: string) => void;
   canDelete: boolean;
   favoriteVendors?: VendorData[];
+  disabled?: boolean;
 }
 
-const VendorCard = ({ vendor, onUpdate, onDelete, onFavorite, canDelete, favoriteVendors = [] }: VendorCardProps) => {
+const VendorCard = ({ vendor, onUpdate, onDelete, onFavorite, canDelete, favoriteVendors = [], disabled = false }: VendorCardProps) => {
   const [localCostValue, setLocalCostValue] = useState('');
   const [showVendorDropdown, setShowVendorDropdown] = useState(false);
 
