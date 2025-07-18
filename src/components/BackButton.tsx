@@ -11,10 +11,10 @@ const BackButton = () => {
       <Button
         onClick={() => navigate('/home')}
         variant="ghost"
-        size="sm"
-        className="text-black hover:bg-gray-100 p-2"
+        size="lg"
+        className="text-black hover:bg-gray-100 p-4 h-16 w-16"
       >
-        <Home size={40} />
+        <Home size={32} />
       </Button>
     </div>
   );
