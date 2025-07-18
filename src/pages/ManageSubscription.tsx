@@ -3,7 +3,7 @@ import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Crown, ArrowLeft, Settings, LogOut } from 'lucide-react';
+import { Crown, ArrowLeft, Settings, LogOut, Trash2 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import Layout from '@/components/Layout';
 
@@ -73,6 +73,35 @@ const ManageSubscription = () => {
       navigate('/login');
     } catch (error) {
       console.error('Error signing out:', error);
+    }
+  };
+
+  const handleDeleteAccount = async () => {
+    const confirmed = confirm(
+      'Are you sure you want to delete your account? This action cannot be undone.\n\nIMPORTANT: If you have an active subscription, you must cancel it separately through your Apple ID settings before or after deleting your account.'
+    );
+    
+    if (!confirmed) return;
+
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
+
+      // Call the edge function to delete the user account
+      const { error } = await supabase.functions.invoke('delete-user', {
+        headers: {
+          Authorization: `Bearer ${session.access_token}`,
+        },
+      });
+      
+      if (error) throw error;
+      
+      // Sign out and redirect
+      await supabase.auth.signOut();
+      navigate('/login');
+    } catch (error) {
+      console.error('Error deleting account:', error);
+      alert('Failed to delete account. Please try again.');
     }
   };
 
@@ -217,6 +246,29 @@ const ManageSubscription = () => {
               </span>
               <span className="text-sm">Collaborative bidding</span>
             </div>
+          </CardContent>
+        </Card>
+
+        {/* Danger Zone */}
+        <Card className="border-red-200">
+          <CardHeader>
+            <CardTitle className="text-lg text-red-600">Danger Zone</CardTitle>
+            <CardDescription>
+              Permanently delete your account and all associated data
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Button
+              onClick={handleDeleteAccount}
+              variant="destructive"
+              className="w-full flex items-center gap-2"
+            >
+              <Trash2 className="h-4 w-4" />
+              Delete Account
+            </Button>
+            <p className="text-xs text-center text-gray-600 mt-2">
+              This action cannot be undone. Active subscriptions must be cancelled separately through App Store.
+            </p>
           </CardContent>
         </Card>
       </div>
