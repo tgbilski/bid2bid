@@ -11,6 +11,7 @@ import EmailSharingInput from '@/components/EmailSharingInput';
 import VendorCard, { VendorData } from '@/components/VendorCard';
 import SuccessCheckmark from '@/components/SuccessCheckmark';
 import { useSuccessMessage } from '@/hooks/useSuccessMessage';
+import { toast } from '@/hooks/use-toast'; // Import toast for notifications
 
 interface Project {
   id: string;
@@ -28,8 +29,6 @@ const ExistingProject = () => {
   const [vendors, setVendors] = useState<VendorData[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isSubscribed, setIsSubscribed] = useState(false);
-  // Removed favoriteVendors state as it's not directly managed on this page
-  // The `isFavorite` status is now part of each vendor in the `vendors` state.
   const { message, show, showSuccess, hideSuccess } = useSuccessMessage();
 
   useEffect(() => {
@@ -40,7 +39,6 @@ const ExistingProject = () => {
         return;
       }
       await checkSubscription();
-      // Removed loadFavoriteVendors() call from here
       await loadProject();
     };
 
@@ -63,11 +61,13 @@ const ExistingProject = () => {
       }
     } catch (error) {
       console.error('Error checking subscription:', error);
+      toast({
+        title: "Subscription Check Failed",
+        description: "Could not verify subscription status.",
+        variant: "destructive",
+      });
     }
   };
-
-  // Removed loadFavoriteVendors function as it's not needed on this page.
-  // The `isFavorite` status for each vendor is loaded with the project itself.
 
   const loadProject = async () => {
     try {
@@ -93,6 +93,11 @@ const ExistingProject = () => {
 
       if (sharesError) {
         console.error('Error loading shares:', sharesError);
+        toast({
+          title: "Error",
+          description: "Failed to load project shares.",
+          variant: "destructive",
+        });
       } else if (sharesData) {
         setSharedEmails(sharesData.map(share => share.shared_with_email));
       }
@@ -105,6 +110,11 @@ const ExistingProject = () => {
 
       if (vendorError) {
         console.error('Error loading vendors:', vendorError);
+        toast({
+          title: "Error",
+          description: "Failed to load vendor data.",
+          variant: "destructive",
+        });
       } else if (vendorData && vendorData.length > 0) {
         const formattedVendors = vendorData.map(vendor => ({
           id: vendor.id,
@@ -122,7 +132,7 @@ const ExistingProject = () => {
       }
     } catch (error) {
       console.error('Error loading project:', error);
-      showSuccess("Failed to load project");
+      showSuccess("Failed to load project"); // Using useSuccessMessage for top-level messages
     } finally {
       setIsLoading(false);
     }
@@ -159,7 +169,7 @@ const ExistingProject = () => {
     const newFavoriteStatus = !vendorToUpdate.isFavorite;
 
     // Optimistically update UI
-    setVendors(vendors.map(vendor =>
+    setVendors(prevVendors => prevVendors.map(vendor =>
       vendor.id === id ? { ...vendor, isFavorite: newFavoriteStatus } : vendor
     ));
 
@@ -171,10 +181,13 @@ const ExistingProject = () => {
         return;
       }
 
-      // If it's a new vendor that hasn't been saved yet, we can't favorite it in DB immediately.
-      // It will be saved with its favorite status when saveProject is called.
+      // If it's a new vendor that hasn't been saved yet,
+      // its favorite status will be saved when the project is saved.
       if (vendorToUpdate.id.startsWith('new-')) {
-        showSuccess("Vendor will be favorited upon project save.");
+        toast({
+          title: "Saving Favorite Status",
+          description: "Vendor will be favorited upon project save.",
+        });
         return;
       }
 
@@ -185,19 +198,30 @@ const ExistingProject = () => {
 
       if (error) {
         console.error('Error updating favorite status:', error);
-        showSuccess("Failed to update favorite status.");
+        toast({
+          title: "Error",
+          description: "Failed to update favorite status in database.",
+          variant: "destructive",
+        });
         // Revert UI if DB update fails
-        setVendors(vendors.map(vendor =>
+        setVendors(prevVendors => prevVendors.map(vendor =>
           vendor.id === id ? { ...vendor, isFavorite: !newFavoriteStatus } : vendor
         ));
       } else {
-        showSuccess(newFavoriteStatus ? "Vendor favorited!" : "Vendor unfavorited!");
+        toast({
+          title: "Favorite Status Updated",
+          description: newFavoriteStatus ? "Vendor marked as favorite." : "Vendor removed from favorites.",
+        });
       }
     } catch (error) {
-      console.error('Error updating favorite status:', error);
-      showSuccess("Failed to update favorite status.");
+      console.error('Error handling favorite:', error);
+      toast({
+        title: "Error",
+        description: "An unexpected error occurred while updating favorite status.",
+        variant: "destructive",
+      });
       // Revert UI if error occurs
-      setVendors(vendors.map(vendor =>
+      setVendors(prevVendors => prevVendors.map(vendor =>
         vendor.id === id ? { ...vendor, isFavorite: !newFavoriteStatus } : vendor
       ));
     }
@@ -210,7 +234,7 @@ const ExistingProject = () => {
     }
 
     // Optimistically remove from UI
-    setVendors(vendors.filter(vendor => vendor.id !== id));
+    setVendors(prevVendors => prevVendors.filter(vendor => vendor.id !== id));
 
     // If it's an existing vendor (not a new one with temp ID), delete from DB
     if (!id.startsWith('new-')) {
@@ -222,29 +246,50 @@ const ExistingProject = () => {
 
         if (error) {
           console.error('Error deleting vendor from DB:', error);
-          showSuccess("Failed to delete vendor from database.");
-          // You might want to re-add the vendor to state if DB deletion fails
-          // For simplicity, we'll just log the error here.
+          toast({
+            title: "Error",
+            description: "Failed to delete vendor from database.",
+            variant: "destructive",
+          });
+          // For a real app, you might want to re-add the vendor to state here if DB deletion fails
         } else {
-          showSuccess("Vendor deleted successfully!");
+          toast({
+            title: "Vendor Deleted",
+            description: "Vendor removed successfully.",
+          });
         }
       } catch (error) {
         console.error('Error deleting vendor:', error);
-        showSuccess("Failed to delete vendor.");
+        toast({
+          title: "Error",
+          description: "An unexpected error occurred while deleting vendor.",
+          variant: "destructive",
+        });
       }
     } else {
-      showSuccess("Vendor card removed.");
+      toast({
+        title: "Vendor Card Removed",
+        description: "Temporary vendor card removed.",
+      });
     }
   };
 
   const saveProject = async () => {
     if (!project || !projectName.trim()) {
-      showSuccess("Please enter a project name before saving.");
+      toast({
+        title: "Validation Error",
+        description: "Please enter a project name before saving.",
+        variant: "destructive",
+      });
       return;
     }
 
     if (sharedEmails.length > 0 && !isSubscribed) {
-      showSuccess("Project sharing is only available with a Premium subscription.");
+      toast({
+        title: "Subscription Required",
+        description: "Project sharing is only available with a Premium subscription.",
+        variant: "destructive",
+      });
       return;
     }
 
@@ -255,41 +300,56 @@ const ExistingProject = () => {
         return;
       }
 
-      // Update project name
+      // 1. Update project name
       const { error: projectError } = await supabase
         .from('projects')
         .update({ name: projectName })
         .eq('id', project.id);
 
       if (projectError) {
-        showSuccess("Failed to update project name.");
+        console.error('Error updating project name:', projectError);
+        toast({
+          title: "Error",
+          description: "Failed to update project name.",
+          variant: "destructive",
+        });
         return;
       }
 
-      // Prepare vendors for upsert (insert new, update existing)
-      const vendorsToUpsert = vendors.map(vendor => ({
-        id: vendor.id.startsWith('new-') ? undefined : vendor.id, // Supabase will generate ID for new rows
-        project_id: project.id,
-        vendor_name: vendor.vendorName || 'Unnamed Vendor',
-        phone_number: vendor.phoneNumber || null,
-        start_date: vendor.startDate || null,
-        job_duration: vendor.jobDuration || null,
-        total_cost: vendor.totalCost ? parseFloat(vendor.totalCost.replace(/[^0-9.]/g, '')) : null,
-        is_favorite: vendor.isFavorite || false // isFavorite status is now correctly passed
-      }));
+      // 2. Prepare vendors for upsert (insert new, update existing)
+      // Only save if at least one meaningful field has data or is explicitly favorited.
+      const vendorsToUpsert = vendors
+        .filter(v => v.vendorName || v.phoneNumber || v.startDate || v.jobDuration || v.totalCost || v.isFavorite)
+        .map(vendor => ({
+          // If the vendor has a temporary 'new-' ID, set id to undefined so Supabase generates a new one.
+          // Otherwise, use the existing ID for updates.
+          id: vendor.id.startsWith('new-') ? undefined : vendor.id,
+          project_id: project.id,
+          vendor_name: vendor.vendorName || 'Unnamed Vendor',
+          phone_number: vendor.phoneNumber || null,
+          start_date: vendor.startDate || null,
+          job_duration: vendor.jobDuration || null,
+          total_cost: vendor.totalCost ? parseFloat(vendor.totalCost.replace(/[^0-9.]/g, '')) : null,
+          is_favorite: vendor.isFavorite || false
+        }));
 
-      // Use upsert to insert new vendors and update existing ones
+      // 3. Use upsert to insert new vendors and update existing ones
+      // 'onConflict: 'id'' tells Supabase to update if an ID matches, otherwise insert.
       const { error: vendorUpsertError } = await supabase
         .from('vendors')
-        .upsert(vendorsToUpsert, { onConflict: 'id' }); // Conflict on 'id' to update existing
+        .upsert(vendorsToUpsert, { onConflict: 'id' });
 
       if (vendorUpsertError) {
         console.error('Error saving vendors:', vendorUpsertError);
-        showSuccess("Failed to save vendor data.");
+        toast({
+          title: "Error",
+          description: "Failed to save vendor data.",
+          variant: "destructive",
+        });
         return;
       }
 
-      // Handle project shares (delete existing, then insert current)
+      // 4. Handle project shares (delete existing, then insert current)
       if (isSubscribed) {
         await supabase
           .from('project_shares')
@@ -310,15 +370,30 @@ const ExistingProject = () => {
 
           if (shareError) {
             console.error('Error saving shares:', shareError);
-            showSuccess("Project saved but sharing may not have worked properly.");
+            toast({
+              title: "Warning",
+              description: "Project saved but sharing may not have worked properly.",
+            });
           }
         }
       }
 
-      showSuccess("Project updated successfully!");
+      toast({
+        title: "Success",
+        description: "Project updated successfully!",
+      });
+
+      // After successful save, reload the project to get the actual IDs for new vendors
+      // and ensure the local state is fully synchronized with the database.
+      await loadProject();
+
     } catch (error) {
       console.error('Error updating project:', error);
-      showSuccess("Failed to update project");
+      toast({
+        title: "Error",
+        description: "Failed to update project",
+        variant: "destructive",
+      });
     }
   };
 
@@ -391,7 +466,6 @@ const ExistingProject = () => {
                 onDelete={deleteVendor}
                 onFavorite={handleFavorite} // This now triggers DB update
                 canDelete={vendors.length > 1}
-                // favoriteVendors prop is no longer needed here as isFavorite is on the vendor object itself
               />
             ))}
 
