@@ -3,51 +3,63 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Plus } from 'lucide-react';
+import { Plus, Loader2 } from 'lucide-react'; // Added Loader2 for loading state
+import { toast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import Layout from '@/components/Layout';
 import BackButton from '@/components/BackButton';
 import EmailSharingInput from '@/components/EmailSharingInput';
 import VendorCard, { VendorData } from '@/components/VendorCard';
-import SuccessCheckmark from '@/components/SuccessCheckmark';
-import { useSuccessMessage } from '@/hooks/useSuccessMessage';
-import { toast } from '@/hooks/use-toast'; // Import toast for notifications
 
 interface Project {
   id: string;
   name: string;
   created_at: string;
   updated_at: string;
-  // IMPORTANT: Ensure your project data also loads the user_id or owner_id from the DB
-  // This is critical for RLS checks. Adjust the type based on your actual column name.
-  user_id: string; // Or owner_id: string; if that's what your DB uses
+  user_id: string; // Add user_id to Project interface for ownership checks
 }
 
 const ExistingProject = () => {
-  const { projectId } = useParams();
+  const { projectId } = useParams<{ projectId: string }>(); // Ensure projectId is typed as string
   const navigate = useNavigate();
   const [project, setProject] = useState<Project | null>(null);
   const [projectName, setProjectName] = useState('');
   const [sharedEmails, setSharedEmails] = useState<string[]>([]);
   const [vendors, setVendors] = useState<VendorData[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [isSaving, setIsSaving] = useState(false); // New state for individual save operations
   const [isSubscribed, setIsSubscribed] = useState(false);
-  const { message, show, showSuccess, hideSuccess } = useSuccessMessage();
 
   useEffect(() => {
     const checkAuthAndLoadProject = async () => {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) {
-        console.log("No session found during initial load, navigating to login.");
         navigate('/login');
+        toast({
+          title: "Authentication Required",
+          description: "Please log in to view project details.",
+          variant: "destructive",
+        });
         return;
       }
+
+      // Check for projectId existence
+      if (!projectId) {
+        toast({
+          title: "Error",
+          description: "No project ID provided in URL.",
+          variant: "destructive",
+        });
+        navigate('/my-projects');
+        return;
+      }
+      
       await checkSubscription();
-      await loadProject();
+      await loadProjectData(); // Renamed to avoid confusion with internal 'project' state
     };
 
     checkAuthAndLoadProject();
-  }, [projectId, navigate]); // Added navigate to dependency array
+  }, [projectId, navigate]); // Add projectId to dependencies to re-run if URL param changes
 
   const checkSubscription = async () => {
     try {
@@ -62,32 +74,28 @@ const ExistingProject = () => {
 
       if (!error && data) {
         setIsSubscribed(data.subscribed || false);
-      } else if (error) {
-        console.error('Error from check-subscription function:', error);
       }
     } catch (error) {
       console.error('Error checking subscription:', error);
-      toast({
-        title: "Subscription Check Failed",
-        description: "Could not verify subscription status.",
-        variant: "destructive",
-      });
     }
   };
 
-  const loadProject = async () => {
+  const loadProjectData = async () => { // Renamed this function
+    setIsLoading(true);
     try {
-      // Ensure 'user_id' (or 'owner_id') is selected here
+      // Load project
       const { data: projectData, error: projectError } = await supabase
         .from('projects')
-        .select('*, user_id') // Make sure 'user_id' is explicitly selected
-        // Or if your column is named owner_id: .select('*, owner_id')
+        .select('*')
         .eq('id', projectId)
         .single();
 
       if (projectError || !projectData) {
-        console.error('Error loading project data:', projectError);
-        showSuccess("The requested project could not be found or you don't have access.");
+        toast({
+          title: "Project Not Found",
+          description: "The requested project could not be found.",
+          variant: "destructive",
+        });
         navigate('/my-projects');
         return;
       }
@@ -95,6 +103,7 @@ const ExistingProject = () => {
       setProject(projectData);
       setProjectName(projectData.name);
 
+      // Load existing shares
       const { data: sharesData, error: sharesError } = await supabase
         .from('project_shares')
         .select('shared_with_email')
@@ -102,342 +111,326 @@ const ExistingProject = () => {
 
       if (sharesError) {
         console.error('Error loading shares:', sharesError);
-        toast({
-          title: "Error",
-          description: "Failed to load project shares.",
-          variant: "destructive",
-        });
       } else if (sharesData) {
         setSharedEmails(sharesData.map(share => share.shared_with_email));
       }
 
+      // Load vendors
       const { data: vendorData, error: vendorError } = await supabase
         .from('vendors')
-        .select('*') // Select all columns, including is_favorite, and now phone_number
+        .select('*')
         .eq('project_id', projectId)
         .order('created_at');
 
       if (vendorError) {
         console.error('Error loading vendors:', vendorError);
-        toast({
-          title: "Error",
-          description: "Failed to load vendor data.",
-          variant: "destructive",
-        });
+        setVendors([]); // Ensure vendors array is empty on error
       } else if (vendorData && vendorData.length > 0) {
         const formattedVendors = vendorData.map(vendor => ({
           id: vendor.id,
           vendorName: vendor.vendor_name,
-          phoneNumber: vendor.phone_number || '', // Include phone_number
           startDate: vendor.start_date || '',
           jobDuration: vendor.job_duration || '',
-          totalCost: vendor.total_cost ? `$${vendor.total_cost.toFixed(2)}` : '',
+          totalCost: vendor.total_cost !== null ? `$${vendor.total_cost.toFixed(2)}` : '',
           isFavorite: vendor.is_favorite || false
         }));
         setVendors(formattedVendors);
       } else {
-        // If no vendors, add an initial empty one
-        addVendor();
+        // If no vendors, initialize with one empty card, but *don't save to DB yet*
+        // This mirrors NewProject's initial local state behavior
+        setVendors([{
+            id: Date.now().toString(), // Use client-side ID for new unsaved vendor
+            vendorName: '',
+            startDate: '',
+            jobDuration: '',
+            totalCost: '',
+            isFavorite: false
+        }]);
       }
     } catch (error) {
-      console.error('Caught unexpected error in loadProject:', error);
-      showSuccess("Failed to load project"); // Using useSuccessMessage for top-level messages
+      console.error('Error loading project data:', error);
+      toast({
+        title: "Error",
+        description: "Failed to load project data.",
+        variant: "destructive",
+      });
+      navigate('/my-projects');
     } finally {
       setIsLoading(false);
     }
   };
 
-  const addVendor = () => {
-    if (vendors.length >= 10) {
-      showSuccess("You can only add up to 10 vendor cards.");
-      return;
+  // --- Vendor CRUD Operations (NOW Directly to Supabase) ---
+
+  const addVendor = async () => {
+    if (!project) {
+        toast({ title: "Error", description: "Project not loaded yet.", variant: "destructive" });
+        return;
     }
-
-    const newVendor: VendorData = {
-      id: `new-${Date.now()}`, // Use a temporary ID for new vendors
-      vendorName: '',
-      phoneNumber: '',
-      startDate: '',
-      jobDuration: '',
-      totalCost: '',
-      isFavorite: false
-    };
-    setVendors([...vendors, newVendor]);
-  };
-
-  const updateVendor = (id: string, field: keyof VendorData, value: string | boolean) => {
-    setVendors(vendors.map(vendor =>
-      vendor.id === id ? { ...vendor, [field]: value } : vendor
-    ));
-  };
-
-  const handleFavorite = async (id: string) => {
-    const vendorToUpdate = vendors.find(vendor => vendor.id === id);
-    if (!vendorToUpdate) return;
-
-    const newFavoriteStatus = !vendorToUpdate.isFavorite;
-
-    // Optimistically update UI
-    setVendors(prevVendors => prevVendors.map(vendor =>
-      vendor.id === id ? { ...vendor, isFavorite: newFavoriteStatus } : vendor
-    ));
-
-    // Persist to database
-    try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) {
-        console.log("No session found during handleFavorite, navigating to login.");
-        navigate('/login');
-        return;
-      }
-
-      // If it's a new vendor that hasn't been saved yet,
-      // its favorite status will be saved when the project is saved.
-      if (vendorToUpdate.id.startsWith('new-')) {
-        toast({
-          title: "Saving Favorite Status",
-          description: "Vendor will be favorited upon project save.",
-        });
-        return;
-      }
-
-      const { error } = await supabase
-        .from('vendors')
-        .update({ is_favorite: newFavoriteStatus })
-        .eq('id', id);
-
-      if (error) {
-        console.error('Error updating favorite status in DB:', error);
-        toast({
-          title: "Error",
-          description: "Failed to update favorite status in database.",
-          variant: "destructive",
-        });
-        // Revert UI if DB update fails
-        setVendors(prevVendors => prevVendors.map(vendor =>
-          vendor.id === id ? { ...vendor, isFavorite: !newFavoriteStatus } : vendor
-        ));
-      } else {
-        toast({
-          title: "Favorite Status Updated",
-          description: newFavoriteStatus ? "Vendor marked as favorite." : "Vendor removed from favorites.",
-        });
-      }
-    } catch (error) {
-      console.error('Caught unexpected error handling favorite:', error);
+    if (vendors.length >= 10) {
       toast({
-        title: "Error",
-        description: "An unexpected error occurred while updating favorite status.",
+        title: "Maximum Reached",
+        description: "You can only add up to 10 vendor cards.",
         variant: "destructive",
       });
-      // Revert UI if error occurs
-      setVendors(prevVendors => prevVendors.map(vendor =>
-        vendor.id === id ? { ...vendor, isFavorite: !newFavoriteStatus } : vendor
-      ));
-    }
-  };
-
-  const deleteVendor = async (id: string) => {
-    if (vendors.length <= 1) {
-      showSuccess("You must have at least one vendor card.");
       return;
     }
 
-    // Optimistically remove from UI
-    setVendors(prevVendors => prevVendors.filter(vendor => vendor.id !== id));
+    setIsSaving(true);
+    try {
+        const newVendorDataForDB = {
+            project_id: project.id, // Link new vendor to current project
+            vendor_name: '', // Empty values
+            start_date: null,
+            job_duration: null,
+            total_cost: null,
+            is_favorite: false
+        };
 
-    // If it's an existing vendor (not a new one with temp ID), delete from DB
-    if (!id.startsWith('new-')) {
-      try {
-        const { error } = await supabase
-          .from('vendors')
-          .delete()
-          .eq('id', id);
+        const { data: insertedVendor, error } = await supabase
+            .from('vendors')
+            .insert([newVendorDataForDB])
+            .select() // Get the actual ID generated by Supabase
+            .single();
 
-        if (error) {
-          console.error('Error deleting vendor from DB:', error);
-          toast({
-            title: "Error",
-            description: "Failed to delete vendor from database.",
-            variant: "destructive",
-          });
-          // For a real app, you might want to re-add the vendor to state here if DB deletion fails
-        } else {
-          toast({
-            title: "Vendor Deleted",
-            description: "Vendor removed successfully.",
-          });
+        if (error) throw error;
+
+        // Add the newly created vendor to local state with its real Supabase ID
+        if (insertedVendor) {
+            setVendors(prev => [...prev, {
+                id: insertedVendor.id, // Use the actual ID from Supabase
+                vendorName: insertedVendor.vendor_name,
+                startDate: insertedVendor.start_date || '',
+                jobDuration: insertedVendor.job_duration || '',
+                totalCost: insertedVendor.total_cost !== null ? `$${insertedVendor.total_cost.toFixed(2)}` : '',
+                isFavorite: insertedVendor.is_favorite || false
+            }]);
+            toast({ title: "Vendor Added", description: "New vendor card created." });
         }
-      } catch (error) {
-        console.error('Caught unexpected error deleting vendor:', error);
-        toast({
-          title: "Error",
-          description: "An unexpected error occurred while deleting vendor.",
-          variant: "destructive",
-        });
-      }
-    } else {
-      toast({
-        title: "Vendor Card Removed",
-        description: "Temporary vendor card removed.",
-      });
+    } catch (error) {
+        console.error("Error adding vendor:", error);
+        toast({ title: "Error", description: "Failed to add vendor.", variant: "destructive" });
+    } finally {
+        setIsSaving(false);
     }
   };
 
-  const saveProject = async () => {
+  const updateVendor = async (id: string, field: keyof VendorData, value: string | boolean) => {
+    // Optimistically update local state for immediate UI feedback
+    setVendors(prevVendors => prevVendors.map(vendor =>
+        vendor.id === id ? { ...vendor, [field]: value } : vendor
+    ));
+
+    // Prepare data for Supabase update
+    let supabaseValue: any = value;
+    let supabaseField: string = field;
+
+    if (field === 'vendorName') supabaseField = 'vendor_name';
+    if (field === 'startDate') supabaseField = 'start_date';
+    if (field === 'jobDuration') supabaseField = 'job_duration';
+    if (field === 'totalCost') {
+        supabaseField = 'total_cost';
+        supabaseValue = value ? parseFloat(value.toString().replace(/[^0-9.]/g, '')) : null;
+        if (isNaN(supabaseValue)) supabaseValue = null;
+    }
+    if (field === 'isFavorite') supabaseField = 'is_favorite';
+    
+    // Perform the database update
+    try {
+        const { error } = await supabase
+            .from('vendors')
+            .update({ [supabaseField]: supabaseValue })
+            .eq('id', id); // Update the specific vendor by its Supabase ID
+
+        if (error) throw error;
+        // Optionally show a silent success or no toast for minor updates
+    } catch (error) {
+        console.error("Error updating vendor:", error);
+        toast({ title: "Error", description: "Failed to update vendor.", variant: "destructive" });
+        // Consider reverting local state on error if necessary
+    }
+    // No setIsSaving here, as updates are frequent and non-blocking
+  };
+
+  const handleDeleteVendor = async (id: string) => { // Renamed for clarity
+    if (vendors.length <= 1) {
+      toast({
+        title: "Cannot Delete",
+        description: "You must have at least one vendor card.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (!confirm("Are you sure you want to delete this vendor card?")) {
+        return;
+    }
+
+    setIsSaving(true); // Indicate a save operation is in progress
+    try {
+        const { error } = await supabase
+            .from('vendors')
+            .delete()
+            .eq('id', id); // Delete the specific vendor by its Supabase ID
+
+        if (error) throw error;
+
+        // Update local state after successful deletion
+        setVendors(prevVendors => prevVendors.filter(vendor => vendor.id !== id));
+        toast({ title: "Vendor Deleted", description: "Vendor card removed." });
+    } catch (error) {
+        console.error("Error deleting vendor:", error);
+        toast({ title: "Error", description: "Failed to delete vendor.", variant: "destructive" });
+    } finally {
+        setIsSaving(false);
+    }
+  };
+  
+  const handleFavorite = async (id: string) => { // Renamed for clarity and to match onDelete
+    // Optimistically update local state
+    setVendors(prevVendors => prevVendors.map(vendor => {
+        if (vendor.id === id) {
+            return { ...vendor, isFavorite: !vendor.isFavorite };
+        }
+        return vendor;
+    }));
+
+    // Find the current status to send to DB
+    const vendorToUpdate = vendors.find(v => v.id === id);
+    if (!vendorToUpdate) return;
+    const newFavoriteStatus = !vendorToUpdate.isFavorite; // Based on prior state
+
+    try {
+        const { error } = await supabase
+            .from('vendors')
+            .update({ is_favorite: newFavoriteStatus })
+            .eq('id', id);
+
+        if (error) throw error;
+        toast({ title: "Favorite Updated", description: "Vendor favorite status changed." });
+    } catch (error) {
+        console.error("Error updating favorite status:", error);
+        toast({ title: "Error", description: "Failed to update favorite status.", variant: "destructive" });
+        // Revert local state if error
+        setVendors(prevVendors => prevVendors.map(vendor => {
+            if (vendor.id === id) {
+                return { ...vendor, isFavorite: !vendor.isFavorite }; // Flip it back
+            }
+            return vendor;
+        }));
+    }
+  };
+
+  // --- Project Name Update ---
+  const handleProjectNameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setProjectName(e.target.value);
+  };
+
+  const saveProjectName = async () => {
     if (!project || !projectName.trim()) {
       toast({
-        title: "Validation Error",
-        description: "Please enter a project name before saving.",
+        title: "Project Name Required",
+        description: "Please enter a project name.",
         variant: "destructive",
       });
       return;
     }
+    if (projectName === project.name) { // No change, no save
+        return;
+    }
 
+    setIsSaving(true);
+    try {
+      const { error } = await supabase
+        .from('projects')
+        .update({ name: projectName, updated_at: new Date().toISOString() })
+        .eq('id', project.id);
+
+      if (error) throw error;
+
+      setProject(prev => prev ? { ...prev, name: projectName } : null); // Update local project state
+      toast({ title: "Project Name Saved", description: "Project name updated successfully." });
+    } catch (error) {
+      console.error('Error updating project name:', error);
+      toast({
+        title: "Error",
+        description: "Failed to update project name.",
+        variant: "destructive",
+      });
+    } finally {
+        setIsSaving(false);
+    }
+  };
+
+  // --- Project Sharing Update ---
+  const saveProjectShares = async () => {
+    if (!project) return; // Project must be loaded
     if (sharedEmails.length > 0 && !isSubscribed) {
       toast({
-        title: "Subscription Required",
+        title: "Premium Feature",
         description: "Project sharing is only available with a Premium subscription.",
         variant: "destructive",
       });
       return;
     }
 
+    setIsSaving(true);
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) {
-        console.log("No session found during saveProject, navigating to login.");
-        navigate('/login');
-        return;
-      }
+      // Get current shares from DB to compare (optional, but robust)
+      const { data: existingShares, error: fetchError } = await supabase
+        .from('project_shares')
+        .select('shared_with_email')
+        .eq('project_id', project.id);
+      if (fetchError) throw fetchError;
+      const existingSharedEmails = new Set(existingShares?.map(s => s.shared_with_email) || []);
 
-      // --- DEBUGGING LOGS START ---
-      console.log("--- SAVE PROJECT DEBUGGING ---");
-      console.log("Current Session User ID:", session.user.id);
-      console.log("Project ID being saved:", project.id);
-      // Ensure 'project.user_id' exists in your Project interface and is fetched by loadProject
-      console.log("Project Owner ID (from loaded project state):", project.user_id);
-      // --- DEBUGGING LOGS END ---
+      const emailsToAdd = sharedEmails.filter(email => !existingSharedEmails.has(email));
+      const emailsToRemove = Array.from(existingSharedEmails).filter(email => !sharedEmails.includes(email));
 
-      // 1. Update project name
-      const { error: projectError } = await supabase
-        .from('projects')
-        .update({ name: projectName })
-        .eq('id', project.id);
-
-      if (projectError) {
-        console.error('Error updating project name:', projectError);
-        toast({
-          title: "Error",
-          description: "Failed to update project name.",
-          variant: "destructive",
-        });
-        return;
-      }
-
-      // 2. Prepare vendors for upsert (insert new, update existing)
-      // Only save if at least one meaningful field has data or is explicitly favorited.
-      const vendorsToUpsert = vendors
-        .filter(v => v.vendorName || v.phoneNumber || v.startDate || v.jobDuration || v.totalCost || v.isFavorite)
-        .map(vendor => {
-          // Start with common fields for all vendors
-          const vendorPayload: any = { // Using 'any' for flexibility, can refine the type if needed
-            project_id: project.id,
-            vendor_name: vendor.vendorName || 'Unnamed Vendor',
-            phone_number: vendor.phoneNumber || null,
-            start_date: vendor.startDate || null,
-            job_duration: vendor.jobDuration || null,
-            total_cost: vendor.totalCost ? parseFloat(vendor.totalCost.replace(/[^0-9.]/g, '')) : null,
-            is_favorite: vendor.isFavorite || false
-          };
-
-          // ONLY add the 'id' property if it's an existing vendor
-          // This prevents sending `id: undefined` for new vendors, allowing DB to auto-generate
-          if (!vendor.id.startsWith('new-')) {
-            vendorPayload.id = vendor.id;
-          }
-
-          return vendorPayload;
-        });
-
-      // 3. Use upsert to insert new vendors and update existing ones
-      // 'onConflict: 'id'' tells Supabase to update if an ID matches, otherwise insert.
-      const { error: vendorUpsertError, data: upsertedVendorData } = await supabase
-        .from('vendors')
-        .upsert(vendorsToUpsert, { onConflict: 'id' });
-
-      // --- DEBUGGING LOGS START ---
-      console.log("Vendor Upsert Supabase Error Object:", vendorUpsertError);
-      console.log("Vendor Upsert Supabase Data Object (returned from Supabase):", upsertedVendorData);
-      // --- DEBUGGING LOGS END ---
-
-      if (vendorUpsertError) {
-        console.error('Error saving vendors:', vendorUpsertError);
-        toast({
-          title: "Error",
-          description: "Failed to save vendor data.",
-          variant: "destructive",
-        });
-        return;
-      }
-
-      // 4. Handle project shares (delete existing, then insert current)
-      if (isSubscribed) {
-        await supabase
+      // Delete shares no longer present
+      if (emailsToRemove.length > 0) {
+        const { error: deleteError } = await supabase
           .from('project_shares')
           .delete()
-          .eq('project_id', project.id);
-
-        if (sharedEmails.length > 0) {
-          const shareInserts = sharedEmails.map(email => ({
-            project_id: project.id,
-            owner_id: session.user.id,
-            shared_with_email: email,
-            permission_level: 'view'
-          }));
-
-          const { error: shareError } = await supabase
-            .from('project_shares')
-            .insert(shareInserts);
-
-          if (shareError) {
-            console.error('Error saving shares:', shareError);
-            toast({
-              title: "Warning",
-              description: "Project saved but sharing may not have worked properly.",
-            });
-          }
-        }
+          .eq('project_id', project.id)
+          .in('shared_with_email', emailsToRemove);
+        if (deleteError) throw deleteError;
       }
 
-      toast({
-        title: "Success",
-        description: "Project updated successfully!",
-      });
+      // Insert new shares
+      if (emailsToAdd.length > 0) {
+        const shareInserts = emailsToAdd.map(email => ({
+          project_id: project.id,
+          owner_id: project.user_id, // Use project's actual owner ID
+          shared_with_email: email,
+          permission_level: 'view'
+        }));
 
-      // After successful save, reload the project to get the actual IDs for new vendors
-      // and ensure the local state is fully synchronized with the database.
-      // This is crucial if you rely on database-generated IDs for new vendors.
-      await loadProject();
-
+        const { error: insertError } = await supabase
+          .from('project_shares')
+          .insert(shareInserts);
+        if (insertError) throw insertError;
+      }
+      toast({ title: "Sharing Updated", description: "Project sharing settings saved." });
     } catch (error) {
-      console.error('Caught unexpected error updating project:', error);
+      console.error('Error saving shares:', error);
       toast({
         title: "Error",
-        description: "Failed to update project",
+        description: "Failed to update project sharing.",
         variant: "destructive",
       });
+    } finally {
+        setIsSaving(false);
     }
   };
+
 
   if (isLoading) {
     return (
       <Layout showLogoNavigation={false}>
-        <div className="max-w-md mx-auto mt-8">
-          <BackButton />
-          <div className="text-center">
-            <p className="text-gray-500">Loading project...</p>
-          </div>
+        <div className="max-w-md mx-auto mt-8 text-center">
+          <Loader2 className="h-8 w-8 animate-spin mx-auto mb-4" />
+          <p className="text-gray-500">Loading project...</p>
         </div>
       </Layout>
     );
@@ -446,11 +439,9 @@ const ExistingProject = () => {
   if (!project) {
     return (
       <Layout showLogoNavigation={false}>
-        <div className="max-w-md mx-auto mt-8">
-          <BackButton />
-          <div className="text-center">
-            <p className="text-gray-500">Project not found</p>
-          </div>
+        <div className="max-w-md mx-auto mt-8 text-center">
+          <p className="text-red-500">Project not found or accessible.</p>
+          <Button onClick={() => navigate('/my-projects')} className="mt-4">Go to My Projects</Button>
         </div>
       </Layout>
     );
@@ -458,11 +449,9 @@ const ExistingProject = () => {
 
   return (
     <Layout showLogoNavigation={false}>
-      <SuccessCheckmark message={message} show={show} onComplete={hideSuccess} />
-
       <div className="max-w-md mx-auto mt-8 pb-8">
         <BackButton />
-
+        
         <div className="text-center mb-8">
           <h1 className="text-2xl font-bold text-black mb-2">Edit Project</h1>
           <p className="text-gray-600">Modify your existing project</p>
@@ -476,9 +465,11 @@ const ExistingProject = () => {
             <Input
               id="project-name"
               value={projectName}
-              onChange={(e) => setProjectName(e.target.value)}
+              onChange={handleProjectNameChange}
+              onBlur={saveProjectName} // Save on blur
               placeholder="Enter project name"
               className="mt-1"
+              disabled={isSaving}
             />
           </div>
 
@@ -486,39 +477,50 @@ const ExistingProject = () => {
             sharedEmails={sharedEmails}
             onEmailsChange={setSharedEmails}
             isSubscribed={isSubscribed}
+            onSave={saveProjectShares} // Trigger save when emails are changed and finalized
+            disabled={isSaving}
           />
 
           <div className="space-y-4">
             <h2 className="text-lg font-semibold text-black">Vendor Information</h2>
-
-            {vendors.map((vendor) => (
-              <VendorCard
-                key={vendor.id}
-                vendor={vendor}
-                onUpdate={updateVendor}
-                onDelete={deleteVendor}
-                onFavorite={handleFavorite} // This now triggers DB update
-                canDelete={vendors.length > 1}
-              />
-            ))}
+            
+            {vendors.length === 0 && !isLoading ? (
+                <div className="text-center text-gray-500 py-4">No vendors found for this project. Add one below!</div>
+            ) : (
+                vendors.map((vendor) => (
+                    <VendorCard
+                        key={vendor.id}
+                        vendor={vendor}
+                        onUpdate={updateVendor} // Calls Supabase directly
+                        onDelete={handleDeleteVendor} // Calls Supabase directly
+                        onFavorite={handleFavorite} // Calls Supabase directly
+                        canDelete={vendors.length > 1}
+                        disabled={isSaving} // Disable card during saving operations
+                    />
+                ))
+            )}
 
             {vendors.length < 10 && (
               <Button
                 onClick={addVendor}
                 variant="outline"
                 className="w-full h-12 border-2 border-dashed border-gray-300 hover:border-gray-400 rounded-[10px]"
+                disabled={isSaving} // Disable during save operations
               >
-                <Plus size={20} className="mr-2" />
+                {isSaving ? (
+                    <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                ) : (
+                    <Plus size={20} className="mr-2" />
+                )}
                 Add Vendor Card
               </Button>
             )}
 
-            <Button
-              onClick={saveProject}
-              className="w-full bg-black text-white hover:bg-gray-800 rounded-[10px] h-12"
-            >
-              Update Project
-            </Button>
+            {/* Removed the 'Update Project' button for vendors and shares
+                because changes are now saved live/on blur. If there are other
+                project-level fields that require a single save, you can reintroduce
+                a save button for those specific fields.
+            */}
           </div>
         </div>
       </div>
