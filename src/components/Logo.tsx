@@ -16,7 +16,7 @@ const Logo = ({ className = "", onClick }: LogoProps) => {
         <img 
           src="/lovable-uploads/f5a0a3fb-8d3d-4c91-b307-aef12bc1be68.png" 
           alt="Bid2Bid Logo" 
-          className="max-w-full h-auto max-h-12"
+          className="max-w-full h-auto max-h-24"
         />
       </div>
     </div>
