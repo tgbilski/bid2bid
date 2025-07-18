@@ -39,9 +39,12 @@ serve(async (req) => {
     if (!user?.email) throw new Error("User not authenticated or email not available");
     logStep("User authenticated", { userId: user.id, email: user.email });
 
+    // App Store product ID for verification
+    const APP_STORE_PRODUCT_ID = "io.bid2bid.app.premium.monthly";
+
     // Check if user has an active subscription from App Store
+    // This would typically involve validating App Store receipts
     // For now, we'll check our local database for subscription status
-    // Later, you'll integrate with App Store receipt validation
     
     const { data: subscription, error: subError } = await supabaseClient
       .from("subscribers")
@@ -55,9 +58,13 @@ serve(async (req) => {
 
     if (subscription && !subError) {
       hasActiveSub = subscription.subscribed || false;
-      subscriptionTier = subscription.subscription_tier;
+      subscriptionTier = subscription.subscription_tier || "Premium Monthly";
       subscriptionEnd = subscription.subscription_end;
-      logStep("Found existing subscription record", { subscribed: hasActiveSub, tier: subscriptionTier });
+      logStep("Found existing subscription record", { 
+        subscribed: hasActiveSub, 
+        tier: subscriptionTier,
+        productId: APP_STORE_PRODUCT_ID 
+      });
     } else {
       logStep("No subscription record found, creating default entry");
       // Create a default entry for new users
@@ -67,15 +74,22 @@ serve(async (req) => {
         subscribed: false,
         subscription_tier: null,
         subscription_end: null,
+        product_id: APP_STORE_PRODUCT_ID, // Store the App Store product ID
         updated_at: new Date().toISOString(),
       }, { onConflict: 'email' });
     }
 
-    logStep("Returning subscription status", { subscribed: hasActiveSub, subscriptionTier });
+    logStep("Returning subscription status", { 
+      subscribed: hasActiveSub, 
+      subscriptionTier,
+      productId: APP_STORE_PRODUCT_ID 
+    });
+    
     return new Response(JSON.stringify({
       subscribed: hasActiveSub,
       subscription_tier: subscriptionTier,
-      subscription_end: subscriptionEnd
+      subscription_end: subscriptionEnd,
+      product_id: APP_STORE_PRODUCT_ID
     }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
       status: 200,

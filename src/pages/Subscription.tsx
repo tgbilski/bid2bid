@@ -18,6 +18,9 @@ const Subscription = () => {
   const [isLoading, setIsLoading] = useState(true);
   const navigate = useNavigate();
 
+  // App Store product ID
+  const APP_STORE_PRODUCT_ID = 'io.bid2bid.app.premium.monthly';
+
   useEffect(() => {
     checkAuth();
   }, []);
@@ -58,10 +61,16 @@ const Subscription = () => {
   };
 
   const handleSubscribe = async () => {
-    // This will trigger the App Store subscription flow
-    // You'll implement this with Capacitor's In-App Purchase plugin
-    console.log('Triggering App Store subscription...');
-    // TODO: Implement App Store subscription flow
+    // This will trigger the App Store subscription flow for the specific product ID
+    console.log(`Triggering App Store subscription for product: ${APP_STORE_PRODUCT_ID}`);
+    
+    // In a Capacitor app, you would use the In-App Purchase plugin here
+    // For now, this will redirect to App Store subscription management
+    // When implementing with Capacitor, you'll use:
+    // await Capacitor.Plugins.InAppPurchase2.order(APP_STORE_PRODUCT_ID);
+    
+    // For web testing, we'll just log the product ID
+    alert(`Subscription would be triggered for product: ${APP_STORE_PRODUCT_ID}`);
   };
 
   const handleContinue = () => {
@@ -101,7 +110,8 @@ const Subscription = () => {
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="text-sm text-green-700">
-                <p><strong>Plan:</strong> {subscriptionData.subscription_tier}</p>
+                <p><strong>Plan:</strong> {subscriptionData.subscription_tier || 'Premium Monthly'}</p>
+                <p><strong>Product ID:</strong> {APP_STORE_PRODUCT_ID}</p>
                 {subscriptionData.subscription_end && (
                   <p><strong>Next billing:</strong> {new Date(subscriptionData.subscription_end).toLocaleDateString()}</p>
                 )}
@@ -127,7 +137,7 @@ const Subscription = () => {
                 Premium Features
               </CardTitle>
               <CardDescription>
-                Get access to premium features through App Store subscription
+                Monthly subscription via App Store
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
@@ -145,6 +155,10 @@ const Subscription = () => {
                   <span className="text-sm">Priority customer support</span>
                 </div>
               </div>
+              <div className="text-xs text-gray-600 bg-gray-50 p-3 rounded">
+                <p><strong>Product ID:</strong> {APP_STORE_PRODUCT_ID}</p>
+                <p>This subscription will be processed through Apple's App Store using the product ID configured in App Store Connect.</p>
+              </div>
               <div className="space-y-2">
                 <Button
                   onClick={handleSubscribe}
@@ -160,7 +174,7 @@ const Subscription = () => {
                   Continue with Free Version
                 </Button>
                 <p className="text-xs text-center text-gray-600">
-                  Subscription will be charged through your App Store account
+                  Subscription will be charged through your App Store account at the price set for your region
                 </p>
               </div>
             </CardContent>
