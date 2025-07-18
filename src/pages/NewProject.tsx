@@ -1,23 +1,25 @@
-
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Plus } from 'lucide-react';
-import { toast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import Layout from '@/components/Layout';
 import BackButton from '@/components/BackButton';
 import EmailSharingInput from '@/components/EmailSharingInput';
 import VendorCard, { VendorData } from '@/components/VendorCard';
+import SuccessCheckmark from '@/components/SuccessCheckmark';
+import { useSuccessMessage } from '@/hooks/useSuccessMessage';
 
 const NewProject = () => {
   const [projectName, setProjectName] = useState('');
   const [sharedEmails, setSharedEmails] = useState<string[]>([]);
   const [vendors, setVendors] = useState<VendorData[]>([]);
   const [isSubscribed, setIsSubscribed] = useState(false);
+  const [favoriteVendors, setFavoriteVendors] = useState<VendorData[]>([]);
   const navigate = useNavigate();
+  const { message, show, showSuccess, hideSuccess } = useSuccessMessage();
 
   useEffect(() => {
     const checkAuthAndSubscription = async () => {
@@ -27,11 +29,11 @@ const NewProject = () => {
         return;
       }
       await checkSubscription();
+      await loadFavoriteVendors();
     };
 
     checkAuthAndSubscription();
 
-    // Initialize with one empty vendor card
     if (vendors.length === 0) {
       addVendor();
     }
@@ -56,19 +58,44 @@ const NewProject = () => {
     }
   };
 
+  const loadFavoriteVendors = async () => {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
+
+      const { data: vendorData, error } = await supabase
+        .from('vendors')
+        .select('id, vendor_name, phone_number')
+        .eq('is_favorite', true)
+        .eq('projects.user_id', session.user.id);
+
+      if (!error && vendorData) {
+        const formattedVendors = vendorData.map((vendor: any) => ({
+          id: vendor.id,
+          vendorName: vendor.vendor_name,
+          phoneNumber: vendor.phone_number,
+          startDate: '',
+          jobDuration: '',
+          totalCost: '',
+          isFavorite: true
+        }));
+        setFavoriteVendors(formattedVendors);
+      }
+    } catch (error) {
+      console.error('Error loading favorite vendors:', error);
+    }
+  };
+
   const addVendor = () => {
     if (vendors.length >= 10) {
-      toast({
-        title: "Maximum Reached",
-        description: "You can only add up to 10 vendor cards.",
-        variant: "destructive",
-      });
+      showSuccess("You can only add up to 10 vendor cards.");
       return;
     }
 
     const newVendor: VendorData = {
       id: Date.now().toString(),
       vendorName: '',
+      phoneNumber: '',
       startDate: '',
       jobDuration: '',
       totalCost: '',
@@ -92,11 +119,7 @@ const NewProject = () => {
 
   const deleteVendor = (id: string) => {
     if (vendors.length <= 1) {
-      toast({
-        title: "Cannot Delete",
-        description: "You must have at least one vendor card.",
-        variant: "destructive",
-      });
+      showSuccess("You must have at least one vendor card.");
       return;
     }
     setVendors(vendors.filter(vendor => vendor.id !== id));
@@ -104,20 +127,12 @@ const NewProject = () => {
 
   const saveProject = async () => {
     if (!projectName.trim()) {
-      toast({
-        title: "Project Name Required",
-        description: "Please enter a project name before saving.",
-        variant: "destructive",
-      });
+      showSuccess("Please enter a project name before saving.");
       return;
     }
 
     if (sharedEmails.length > 0 && !isSubscribed) {
-      toast({
-        title: "Premium Feature",
-        description: "Project sharing is only available with a Premium subscription.",
-        variant: "destructive",
-      });
+      showSuccess("Project sharing is only available with a Premium subscription.");
       return;
     }
 
@@ -128,7 +143,6 @@ const NewProject = () => {
         return;
       }
 
-      // Save project
       const { data: projectData, error: projectError } = await supabase
         .from('projects')
         .insert({
@@ -139,20 +153,16 @@ const NewProject = () => {
         .single();
 
       if (projectError) {
-        toast({
-          title: "Error",
-          description: "Failed to save project",
-          variant: "destructive",
-        });
+        showSuccess("Failed to save project");
         return;
       }
 
-      // Save vendors
       const vendorsToSave = vendors.filter(v => v.vendorName || v.startDate || v.jobDuration || v.totalCost);
       if (vendorsToSave.length > 0) {
         const vendorInserts = vendorsToSave.map(vendor => ({
           project_id: projectData.id,
           vendor_name: vendor.vendorName || 'Unnamed Vendor',
+          phone_number: vendor.phoneNumber || null,
           start_date: vendor.startDate || null,
           job_duration: vendor.jobDuration || null,
           total_cost: vendor.totalCost ? parseFloat(vendor.totalCost.replace(/[^0-9.]/g, '')) : null,
@@ -168,7 +178,6 @@ const NewProject = () => {
         }
       }
 
-      // Handle project sharing
       if (isSubscribed && sharedEmails.length > 0) {
         const shareInserts = sharedEmails.map(email => ({
           project_id: projectData.id,
@@ -183,32 +192,25 @@ const NewProject = () => {
 
         if (shareError) {
           console.error('Error saving shares:', shareError);
-          toast({
-            title: "Warning",
-            description: "Project saved but sharing may not have worked properly.",
-            variant: "destructive",
-          });
+          showSuccess("Project saved but sharing may not have worked properly.");
         }
       }
 
-      toast({
-        title: "Project Saved!",
-        description: "Your project has been saved successfully.",
-      });
+      showSuccess("Project saved successfully!");
       
-      navigate('/my-projects');
+      setTimeout(() => {
+        navigate('/my-projects');
+      }, 2000);
     } catch (error) {
       console.error('Error saving project:', error);
-      toast({
-        title: "Error",
-        description: "Failed to save project",
-        variant: "destructive",
-      });
+      showSuccess("Failed to save project");
     }
   };
 
   return (
     <Layout showLogoNavigation={false}>
+      <SuccessCheckmark message={message} show={show} onComplete={hideSuccess} />
+      
       <div className="max-w-md mx-auto mt-8 pb-8">
         <BackButton />
         
@@ -248,6 +250,7 @@ const NewProject = () => {
                 onDelete={deleteVendor}
                 onFavorite={handleFavorite}
                 canDelete={vendors.length > 1}
+                favoriteVendors={favoriteVendors}
               />
             ))}
 

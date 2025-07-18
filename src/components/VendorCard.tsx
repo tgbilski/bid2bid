@@ -1,14 +1,16 @@
-import { useState, useEffect } from 'react'; // Make sure useEffect is imported
+
+import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Card, CardContent } from '@/components/ui/card';
-import { X, Heart } from 'lucide-react';
+import { X, Heart, Phone } from 'lucide-react';
 
 export interface VendorData {
   id: string;
   vendorName: string;
+  phoneNumber?: string;
   startDate: string;
   jobDuration: string;
   totalCost: string; 
@@ -21,39 +23,27 @@ interface VendorCardProps {
   onDelete: (id: string) => void;
   onFavorite: (id: string) => void;
   canDelete: boolean;
+  favoriteVendors?: VendorData[];
 }
 
-const VendorCard = ({ vendor, onUpdate, onDelete, onFavorite, canDelete }: VendorCardProps) => {
-  // Function to clean a formatted currency string to just numbers and a dot
-  // This is crucial for separating display from raw input.
+const VendorCard = ({ vendor, onUpdate, onDelete, onFavorite, canDelete, favoriteVendors = [] }: VendorCardProps) => {
+  const [localCostValue, setLocalCostValue] = useState('');
+  const [showVendorDropdown, setShowVendorDropdown] = useState(false);
+
+  useEffect(() => {
+    setLocalCostValue(cleanForProcessing(vendor.totalCost));
+  }, [vendor.totalCost]);
+
   const cleanForProcessing = (value: string) => {
     return value.replace(/[^0-9.]/g, '');
   };
 
-  // Local state to manage the input's raw (unformatted) value while typing
-  const [localCostValue, setLocalCostValue] = useState('');
-
-  // Use useEffect to synchronize local state with parent prop 'vendor.totalCost'
-  // This runs when the component mounts and whenever vendor.totalCost changes from parent.
-  useEffect(() => {
-    // When vendor.totalCost changes from props, update local state
-    // We clean the incoming vendor.totalCost (which might be "$1,234.56")
-    // to remove '$', commas, etc., so that editing starts with just the raw number "1234.56".
-    setLocalCostValue(cleanForProcessing(vendor.totalCost));
-  }, [vendor.totalCost]); // Dependency array: run effect when vendor.totalCost changes
-
-
   const formatCurrency = (value: string) => {
-    // This function is for final display formatting (e.g., "123.45" -> "$123.45")
-
-    // Clean the value to get only numeric parts (including a decimal)
     const numericValue = value.replace(/[^0-9.]/g, '');
-    
     let number = parseFloat(numericValue);
 
-    // KEY FIX: If it's not a valid number (e.g., empty string, just "."), default to 0
     if (isNaN(number) || numericValue === '') {
-        number = 0; // Default to 0 for formatting as $0.00
+        number = 0;
     }
 
     return number.toLocaleString('en-US', {
@@ -66,28 +56,35 @@ const VendorCard = ({ vendor, onUpdate, onDelete, onFavorite, canDelete }: Vendo
 
   const handleCostChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const inputValue = e.target.value;
-
-    // Allow typing of numbers and a single decimal point
-    // This regex allows digits and at most one decimal point
     const sanitizedValue = inputValue.replace(/[^0-9.]/g, '')
-                                     .replace(/(\..*)\./g, '$1'); // Only allow one decimal point
-
-    // Update the local state for immediate feedback in the input field
+                                     .replace(/(\..*)\./g, '$1');
     setLocalCostValue(sanitizedValue);
   };
 
   const handleCostBlur = () => {
-    // When the user leaves the field, format the value for display
-    // Ensure that localCostValue is a clean numeric string before formatting
     const cleanedValue = cleanForProcessing(localCostValue); 
     const formatted = formatCurrency(cleanedValue);
-    
-    // Update parent state with the fully formatted value
     onUpdate(vendor.id, 'totalCost', formatted);
   };
 
+  const handleCall = (phoneNumber: string) => {
+    if (phoneNumber) {
+      window.location.href = `tel:${phoneNumber}`;
+    }
+  };
+
+  const handleVendorNameSelect = (selectedVendor: VendorData) => {
+    onUpdate(vendor.id, 'vendorName', selectedVendor.vendorName);
+    if (selectedVendor.phoneNumber) {
+      onUpdate(vendor.id, 'phoneNumber', selectedVendor.phoneNumber);
+    }
+    setShowVendorDropdown(false);
+  };
+
   return (
-    <Card className="mb-4 relative">
+    <Card className={`mb-4 relative transition-colors duration-300 ${
+      vendor.isFavorite ? 'bg-green-50 border-green-200' : ''
+    }`}>
       <CardContent className="p-4">
         <div className="absolute top-2 right-2 flex gap-2">
           <Button
@@ -114,18 +111,62 @@ const VendorCard = ({ vendor, onUpdate, onDelete, onFavorite, canDelete }: Vendo
         </div>
         
         <div className="space-y-4 pr-16">
-          <div>
+          <div className="relative">
             <Label htmlFor={`vendor-name-${vendor.id}`} className="text-black">
               Vendor Name
             </Label>
-            <Input
-              id={`vendor-name-${vendor.id}`}
-              value={vendor.vendorName}
-              onChange={(e) => onUpdate(vendor.id, 'vendorName', e.target.value.slice(0, 40))}
-              placeholder="Enter vendor name"
-              maxLength={40}
-              className="mt-1"
-            />
+            <div className="relative">
+              <Input
+                id={`vendor-name-${vendor.id}`}
+                value={vendor.vendorName}
+                onChange={(e) => onUpdate(vendor.id, 'vendorName', e.target.value.slice(0, 40))}
+                onFocus={() => setShowVendorDropdown(favoriteVendors.length > 0)}
+                onBlur={() => setTimeout(() => setShowVendorDropdown(false), 200)}
+                placeholder="Enter vendor name"
+                maxLength={40}
+                className="mt-1"
+              />
+              {showVendorDropdown && favoriteVendors.length > 0 && (
+                <div className="absolute top-full left-0 right-0 bg-white border border-gray-300 rounded-md shadow-lg z-50 max-h-40 overflow-y-auto">
+                  {favoriteVendors.map((favVendor) => (
+                    <button
+                      key={favVendor.id}
+                      onClick={() => handleVendorNameSelect(favVendor)}
+                      className="w-full px-3 py-2 text-left hover:bg-gray-100 border-b border-gray-100 last:border-b-0"
+                    >
+                      <div className="font-medium">{favVendor.vendorName}</div>
+                      {favVendor.phoneNumber && (
+                        <div className="text-sm text-gray-500">{favVendor.phoneNumber}</div>
+                      )}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div>
+            <Label htmlFor={`phone-number-${vendor.id}`} className="text-black">
+              Vendor Phone Number
+            </Label>
+            <div className="flex gap-2 mt-1">
+              <Input
+                id={`phone-number-${vendor.id}`}
+                value={vendor.phoneNumber || ''}
+                onChange={(e) => onUpdate(vendor.id, 'phoneNumber', e.target.value)}
+                placeholder="Enter phone number"
+                className="flex-1"
+              />
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-10 w-10 p-0"
+                onClick={() => handleCall(vendor.phoneNumber || '')}
+                disabled={!vendor.phoneNumber}
+              >
+                <Phone size={16} />
+              </Button>
+            </div>
           </div>
 
           <div>
@@ -169,9 +210,9 @@ const VendorCard = ({ vendor, onUpdate, onDelete, onFavorite, canDelete }: Vendo
             </Label>
             <Input
               id={`total-cost-${vendor.id}`}
-              value={localCostValue} // Input displays the raw, editable value
-              onChange={handleCostChange} // Updates the raw local state
-              onBlur={handleCostBlur} // Formats and updates parent state on blur
+              value={localCostValue}
+              onChange={handleCostChange}
+              onBlur={handleCostBlur}
               placeholder="$0.00"
               className="mt-1"
             />

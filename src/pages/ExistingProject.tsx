@@ -1,16 +1,16 @@
-
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Plus } from 'lucide-react';
-import { toast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import Layout from '@/components/Layout';
 import BackButton from '@/components/BackButton';
 import EmailSharingInput from '@/components/EmailSharingInput';
 import VendorCard, { VendorData } from '@/components/VendorCard';
+import SuccessCheckmark from '@/components/SuccessCheckmark';
+import { useSuccessMessage } from '@/hooks/useSuccessMessage';
 
 interface Project {
   id: string;
@@ -28,6 +28,8 @@ const ExistingProject = () => {
   const [vendors, setVendors] = useState<VendorData[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isSubscribed, setIsSubscribed] = useState(false);
+  const [favoriteVendors, setFavoriteVendors] = useState<VendorData[]>([]);
+  const { message, show, showSuccess, hideSuccess } = useSuccessMessage();
 
   useEffect(() => {
     const checkAuthAndLoadProject = async () => {
@@ -37,6 +39,7 @@ const ExistingProject = () => {
         return;
       }
       await checkSubscription();
+      await loadFavoriteVendors();
       await loadProject();
     };
 
@@ -62,9 +65,35 @@ const ExistingProject = () => {
     }
   };
 
+  const loadFavoriteVendors = async () => {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
+
+      const { data: vendorData, error } = await supabase
+        .from('vendors')
+        .select('id, vendor_name, phone_number')
+        .eq('is_favorite', true);
+
+      if (!error && vendorData) {
+        const formattedVendors = vendorData.map((vendor: any) => ({
+          id: vendor.id,
+          vendorName: vendor.vendor_name,
+          phoneNumber: vendor.phone_number,
+          startDate: '',
+          jobDuration: '',
+          totalCost: '',
+          isFavorite: true
+        }));
+        setFavoriteVendors(formattedVendors);
+      }
+    } catch (error) {
+      console.error('Error loading favorite vendors:', error);
+    }
+  };
+
   const loadProject = async () => {
     try {
-      // Load project
       const { data: projectData, error: projectError } = await supabase
         .from('projects')
         .select('*')
@@ -72,11 +101,7 @@ const ExistingProject = () => {
         .single();
 
       if (projectError || !projectData) {
-        toast({
-          title: "Project Not Found",
-          description: "The requested project could not be found.",
-          variant: "destructive",
-        });
+        showSuccess("The requested project could not be found.");
         navigate('/my-projects');
         return;
       }
@@ -84,7 +109,6 @@ const ExistingProject = () => {
       setProject(projectData);
       setProjectName(projectData.name);
 
-      // Load existing shares
       const { data: sharesData, error: sharesError } = await supabase
         .from('project_shares')
         .select('shared_with_email')
@@ -96,7 +120,6 @@ const ExistingProject = () => {
         setSharedEmails(sharesData.map(share => share.shared_with_email));
       }
 
-      // Load vendors
       const { data: vendorData, error: vendorError } = await supabase
         .from('vendors')
         .select('*')
@@ -109,6 +132,7 @@ const ExistingProject = () => {
         const formattedVendors = vendorData.map(vendor => ({
           id: vendor.id,
           vendorName: vendor.vendor_name,
+          phoneNumber: vendor.phone_number || '',
           startDate: vendor.start_date || '',
           jobDuration: vendor.job_duration || '',
           totalCost: vendor.total_cost ? `$${vendor.total_cost.toFixed(2)}` : '',
@@ -116,16 +140,11 @@ const ExistingProject = () => {
         }));
         setVendors(formattedVendors);
       } else {
-        // If no vendors, add one empty card
         addVendor();
       }
     } catch (error) {
       console.error('Error loading project:', error);
-      toast({
-        title: "Error",
-        description: "Failed to load project",
-        variant: "destructive",
-      });
+      showSuccess("Failed to load project");
     } finally {
       setIsLoading(false);
     }
@@ -133,17 +152,14 @@ const ExistingProject = () => {
 
   const addVendor = () => {
     if (vendors.length >= 10) {
-      toast({
-        title: "Maximum Reached",
-        description: "You can only add up to 10 vendor cards.",
-        variant: "destructive",
-      });
+      showSuccess("You can only add up to 10 vendor cards.");
       return;
     }
 
     const newVendor: VendorData = {
       id: Date.now().toString(),
       vendorName: '',
+      phoneNumber: '',
       startDate: '',
       jobDuration: '',
       totalCost: '',
@@ -167,11 +183,7 @@ const ExistingProject = () => {
 
   const deleteVendor = (id: string) => {
     if (vendors.length <= 1) {
-      toast({
-        title: "Cannot Delete",
-        description: "You must have at least one vendor card.",
-        variant: "destructive",
-      });
+      showSuccess("You must have at least one vendor card.");
       return;
     }
     setVendors(vendors.filter(vendor => vendor.id !== id));
@@ -179,20 +191,12 @@ const ExistingProject = () => {
 
   const saveProject = async () => {
     if (!project || !projectName.trim()) {
-      toast({
-        title: "Project Name Required",
-        description: "Please enter a project name before saving.",
-        variant: "destructive",
-      });
+      showSuccess("Please enter a project name before saving.");
       return;
     }
 
     if (sharedEmails.length > 0 && !isSubscribed) {
-      toast({
-        title: "Premium Feature",
-        description: "Project sharing is only available with a Premium subscription.",
-        variant: "destructive",
-      });
+      showSuccess("Project sharing is only available with a Premium subscription.");
       return;
     }
 
@@ -203,33 +207,27 @@ const ExistingProject = () => {
         return;
       }
 
-      // Update project name
       const { error: projectError } = await supabase
         .from('projects')
         .update({ name: projectName })
         .eq('id', project.id);
 
       if (projectError) {
-        toast({
-          title: "Error",
-          description: "Failed to update project",
-          variant: "destructive",
-        });
+        showSuccess("Failed to update project");
         return;
       }
 
-      // Delete existing vendors
       await supabase
         .from('vendors')
         .delete()
         .eq('project_id', project.id);
 
-      // Insert updated vendors
       const vendorsToSave = vendors.filter(v => v.vendorName || v.startDate || v.jobDuration || v.totalCost);
       if (vendorsToSave.length > 0) {
         const vendorInserts = vendorsToSave.map(vendor => ({
           project_id: project.id,
           vendor_name: vendor.vendorName || 'Unnamed Vendor',
+          phone_number: vendor.phoneNumber || null,
           start_date: vendor.startDate || null,
           job_duration: vendor.jobDuration || null,
           total_cost: vendor.totalCost ? parseFloat(vendor.totalCost.replace(/[^0-9.]/g, '')) : null,
@@ -245,15 +243,12 @@ const ExistingProject = () => {
         }
       }
 
-      // Handle project sharing
       if (isSubscribed) {
-        // Delete existing shares
         await supabase
           .from('project_shares')
           .delete()
           .eq('project_id', project.id);
 
-        // Insert new shares
         if (sharedEmails.length > 0) {
           const shareInserts = sharedEmails.map(email => ({
             project_id: project.id,
@@ -268,26 +263,15 @@ const ExistingProject = () => {
 
           if (shareError) {
             console.error('Error saving shares:', shareError);
-            toast({
-              title: "Warning",
-              description: "Project saved but sharing may not have worked properly.",
-              variant: "destructive",
-            });
+            showSuccess("Project saved but sharing may not have worked properly.");
           }
         }
       }
 
-      toast({
-        title: "Project Updated!",
-        description: "Your project has been updated successfully.",
-      });
+      showSuccess("Project updated successfully!");
     } catch (error) {
       console.error('Error updating project:', error);
-      toast({
-        title: "Error",
-        description: "Failed to update project",
-        variant: "destructive",
-      });
+      showSuccess("Failed to update project");
     }
   };
 
@@ -319,6 +303,8 @@ const ExistingProject = () => {
 
   return (
     <Layout showLogoNavigation={false}>
+      <SuccessCheckmark message={message} show={show} onComplete={hideSuccess} />
+      
       <div className="max-w-md mx-auto mt-8 pb-8">
         <BackButton />
         
@@ -358,6 +344,7 @@ const ExistingProject = () => {
                 onDelete={deleteVendor}
                 onFavorite={handleFavorite}
                 canDelete={vendors.length > 1}
+                favoriteVendors={favoriteVendors}
               />
             ))}
 

@@ -12,6 +12,7 @@ import Home from "./pages/Home";
 import NewProject from "./pages/NewProject";
 import ExistingProject from "./pages/ExistingProject";
 import MyProjects from "./pages/MyProjects";
+import MyFavorites from "./pages/MyFavorites";
 import Subscription from "./pages/Subscription";
 import ManageSubscription from "./pages/ManageSubscription";
 import NotFound from "./pages/NotFound";
@@ -33,6 +34,7 @@ const App = () => (
           <Route path="/new-project" element={<NewProject />} />
           <Route path="/project/:projectId" element={<ExistingProject />} />
           <Route path="/my-projects" element={<MyProjects />} />
+          <Route path="/my-favorites" element={<MyFavorites />} />
           <Route path="/subscription" element={<Subscription />} />
           <Route path="/manage-subscription" element={<ManageSubscription />} />
           <Route path="*" element={<NotFound />} />
