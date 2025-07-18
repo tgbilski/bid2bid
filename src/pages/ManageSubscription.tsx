@@ -3,7 +3,7 @@ import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Crown, ArrowLeft, Settings } from 'lucide-react';
+import { Crown, ArrowLeft, Settings, LogOut } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import Layout from '@/components/Layout';
 
@@ -67,6 +67,15 @@ const ManageSubscription = () => {
     navigate('/subscription');
   };
 
+  const handleLogout = async () => {
+    try {
+      await supabase.auth.signOut();
+      navigate('/login');
+    } catch (error) {
+      console.error('Error signing out:', error);
+    }
+  };
+
   if (isLoading) {
     return (
       <Layout showLogoNavigation={false}>
@@ -82,7 +91,7 @@ const ManageSubscription = () => {
   return (
     <Layout showLogoNavigation={false}>
       <div className="max-w-md mx-auto mt-8 space-y-6">
-        <div className="flex items-center gap-4 mb-8">
+        <div className="flex items-center justify-between gap-4 mb-8">
           <Button
             variant="outline"
             size="sm"
@@ -91,6 +100,15 @@ const ManageSubscription = () => {
           >
             <ArrowLeft className="h-4 w-4" />
             Back
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleLogout}
+            className="flex items-center gap-2 text-red-600 border-red-200 hover:bg-red-50"
+          >
+            <LogOut className="h-4 w-4" />
+            Logout
           </Button>
         </div>
 
