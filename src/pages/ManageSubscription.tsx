@@ -3,7 +3,7 @@ import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Crown, ArrowLeft } from 'lucide-react';
+import { Crown, ArrowLeft, Settings } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import Layout from '@/components/Layout';
 
@@ -56,52 +56,15 @@ const ManageSubscription = () => {
     }
   };
 
-  const openCustomerPortal = async () => {
-    try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) {
-        navigate('/login');
-        return;
-      }
-
-      const { data, error } = await supabase.functions.invoke('customer-portal', {
-        headers: {
-          Authorization: `Bearer ${session.access_token}`,
-        },
-      });
-
-      if (error) throw error;
-
-      if (data?.url) {
-        window.open(data.url, '_blank');
-      }
-    } catch (error) {
-      console.error('Error opening customer portal:', error);
-    }
+  const openAppStoreSettings = () => {
+    // This will open the App Store subscription management
+    console.log('Opening App Store subscription settings...');
+    // TODO: Implement App Store settings navigation
   };
 
-  const createCheckout = async () => {
-    try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) {
-        navigate('/login');
-        return;
-      }
-
-      const { data, error } = await supabase.functions.invoke('create-checkout', {
-        headers: {
-          Authorization: `Bearer ${session.access_token}`,
-        },
-      });
-
-      if (error) throw error;
-
-      if (data?.url) {
-        window.open(data.url, '_blank');
-      }
-    } catch (error) {
-      console.error('Error creating checkout:', error);
-    }
+  const handleSubscribe = () => {
+    // Navigate to subscription page for App Store purchase
+    navigate('/subscription');
   };
 
   if (isLoading) {
@@ -153,7 +116,7 @@ const ManageSubscription = () => {
                   Active Subscription
                 </div>
                 <p className="text-sm text-green-600">
-                  Billing managed through your platform's app store
+                  Managed through App Store
                 </p>
               </div>
               
@@ -165,14 +128,15 @@ const ManageSubscription = () => {
 
               <div className="space-y-2">
                 <Button
-                  onClick={openCustomerPortal}
+                  onClick={openAppStoreSettings}
                   variant="outline"
-                  className="w-full"
+                  className="w-full flex items-center gap-2"
                 >
-                  Manage Subscription
+                  <Settings className="h-4 w-4" />
+                  Manage in App Store
                 </Button>
                 <p className="text-xs text-center text-gray-600">
-                  To manage or cancel your subscription, use your platform's app store settings
+                  To cancel or modify your subscription, use your App Store settings
                 </p>
               </div>
             </CardContent>
@@ -190,19 +154,19 @@ const ManageSubscription = () => {
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="text-center">
-                <div className="text-3xl font-bold text-black mb-2">$0</div>
-                <p className="text-sm text-gray-600">/month</p>
+                <div className="text-3xl font-bold text-black mb-2">Free</div>
+                <p className="text-sm text-gray-600">Basic features included</p>
               </div>
 
               <div className="space-y-2">
                 <Button
-                  onClick={createCheckout}
+                  onClick={handleSubscribe}
                   className="w-full bg-black text-white hover:bg-gray-800"
                 >
                   Upgrade to Premium
                 </Button>
                 <p className="text-xs text-center text-gray-600">
-                  Subscriptions are handled via your platform's app store
+                  Subscription will be processed through App Store
                 </p>
               </div>
             </CardContent>

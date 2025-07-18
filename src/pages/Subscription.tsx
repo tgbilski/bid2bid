@@ -36,6 +36,7 @@ const Subscription = () => {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) return;
 
+      // Check subscription status from your backend
       const { data, error } = await supabase.functions.invoke('check-subscription', {
         headers: {
           Authorization: `Bearer ${session.access_token}`,
@@ -56,52 +57,11 @@ const Subscription = () => {
     }
   };
 
-  const createCheckout = async () => {
-    try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) {
-        navigate('/login');
-        return;
-      }
-
-      const { data, error } = await supabase.functions.invoke('create-checkout', {
-        headers: {
-          Authorization: `Bearer ${session.access_token}`,
-        },
-      });
-
-      if (error) throw error;
-
-      if (data?.url) {
-        window.open(data.url, '_blank');
-      }
-    } catch (error) {
-      console.error('Error creating checkout:', error);
-    }
-  };
-
-  const openCustomerPortal = async () => {
-    try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) {
-        navigate('/login');
-        return;
-      }
-
-      const { data, error } = await supabase.functions.invoke('customer-portal', {
-        headers: {
-          Authorization: `Bearer ${session.access_token}`,
-        },
-      });
-
-      if (error) throw error;
-
-      if (data?.url) {
-        window.open(data.url, '_blank');
-      }
-    } catch (error) {
-      console.error('Error opening customer portal:', error);
-    }
+  const handleSubscribe = async () => {
+    // This will trigger the App Store subscription flow
+    // You'll implement this with Capacitor's In-App Purchase plugin
+    console.log('Triggering App Store subscription...');
+    // TODO: Implement App Store subscription flow
   };
 
   const handleContinue = () => {
@@ -148,18 +108,14 @@ const Subscription = () => {
               </div>
               <div className="space-y-2">
                 <Button
-                  onClick={openCustomerPortal}
-                  variant="outline"
-                  className="w-full"
-                >
-                  Manage Subscription
-                </Button>
-                <Button
                   onClick={handleContinue}
                   className="w-full bg-black text-white hover:bg-gray-800"
                 >
                   Continue to App
                 </Button>
+                <p className="text-xs text-center text-gray-600">
+                  To manage your subscription, go to your App Store settings
+                </p>
               </div>
             </CardContent>
           </Card>
@@ -171,7 +127,7 @@ const Subscription = () => {
                 Premium Features
               </CardTitle>
               <CardDescription>
-                Get access to premium features for a monthly subscription (price varies by region)
+                Get access to premium features through App Store subscription
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
@@ -191,10 +147,10 @@ const Subscription = () => {
               </div>
               <div className="space-y-2">
                 <Button
-                  onClick={createCheckout}
+                  onClick={handleSubscribe}
                   className="w-full bg-black text-white hover:bg-gray-800"
                 >
-                  Subscribe Now
+                  Subscribe via App Store
                 </Button>
                 <Button
                   onClick={handleContinue}
@@ -203,6 +159,9 @@ const Subscription = () => {
                 >
                   Continue with Free Version
                 </Button>
+                <p className="text-xs text-center text-gray-600">
+                  Subscription will be charged through your App Store account
+                </p>
               </div>
             </CardContent>
           </Card>
