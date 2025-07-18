@@ -14,7 +14,7 @@ const BackButton = () => {
         size="lg"
         className="text-black hover:bg-gray-100 p-4 h-16 w-16"
       >
-        <Home size={48} />
+        <Home size={56} />
       </Button>
     </div>
   );
