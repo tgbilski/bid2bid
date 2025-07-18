@@ -113,7 +113,7 @@ const ExistingProject = () => {
 
       const { data: vendorData, error: vendorError } = await supabase
         .from('vendors')
-        .select('*') // Select all columns, including is_favorite
+        .select('*') // Select all columns, including is_favorite, and now phone_number
         .eq('project_id', projectId)
         .order('created_at');
 
@@ -128,11 +128,11 @@ const ExistingProject = () => {
         const formattedVendors = vendorData.map(vendor => ({
           id: vendor.id,
           vendorName: vendor.vendor_name,
-          phoneNumber: vendor.phone_number || '',
+          phoneNumber: vendor.phone_number || '', // Include phone_number
           startDate: vendor.start_date || '',
           jobDuration: vendor.job_duration || '',
           totalCost: vendor.total_cost ? `$${vendor.total_cost.toFixed(2)}` : '',
-          isFavorite: vendor.is_favorite || false // Ensure is_favorite is loaded
+          isFavorite: vendor.is_favorite || false
         }));
         setVendors(formattedVendors);
       } else {
@@ -339,18 +339,26 @@ const ExistingProject = () => {
       // Only save if at least one meaningful field has data or is explicitly favorited.
       const vendorsToUpsert = vendors
         .filter(v => v.vendorName || v.phoneNumber || v.startDate || v.jobDuration || v.totalCost || v.isFavorite)
-        .map(vendor => ({
-          // If the vendor has a temporary 'new-' ID, set id to undefined so Supabase generates a new one.
-          // Otherwise, use the existing ID for updates.
-          id: vendor.id.startsWith('new-') ? undefined : vendor.id,
-          project_id: project.id,
-          vendor_name: vendor.vendorName || 'Unnamed Vendor',
-          phone_number: vendor.phoneNumber || null,
-          start_date: vendor.startDate || null,
-          job_duration: vendor.jobDuration || null,
-          total_cost: vendor.totalCost ? parseFloat(vendor.totalCost.replace(/[^0-9.]/g, '')) : null,
-          is_favorite: vendor.isFavorite || false
-        }));
+        .map(vendor => {
+          // Start with common fields for all vendors
+          const vendorPayload: any = { // Using 'any' for flexibility, can refine the type if needed
+            project_id: project.id,
+            vendor_name: vendor.vendorName || 'Unnamed Vendor',
+            phone_number: vendor.phoneNumber || null,
+            start_date: vendor.startDate || null,
+            job_duration: vendor.jobDuration || null,
+            total_cost: vendor.totalCost ? parseFloat(vendor.totalCost.replace(/[^0-9.]/g, '')) : null,
+            is_favorite: vendor.isFavorite || false
+          };
+
+          // ONLY add the 'id' property if it's an existing vendor
+          // This prevents sending `id: undefined` for new vendors, allowing DB to auto-generate
+          if (!vendor.id.startsWith('new-')) {
+            vendorPayload.id = vendor.id;
+          }
+
+          return vendorPayload;
+        });
 
       // 3. Use upsert to insert new vendors and update existing ones
       // 'onConflict: 'id'' tells Supabase to update if an ID matches, otherwise insert.
