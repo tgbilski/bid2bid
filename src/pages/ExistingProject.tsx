@@ -28,7 +28,8 @@ const ExistingProject = () => {
   const [vendors, setVendors] = useState<VendorData[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isSubscribed, setIsSubscribed] = useState(false);
-  const [favoriteVendors, setFavoriteVendors] = useState<VendorData[]>([]);
+  // Removed favoriteVendors state as it's not directly managed on this page
+  // The `isFavorite` status is now part of each vendor in the `vendors` state.
   const { message, show, showSuccess, hideSuccess } = useSuccessMessage();
 
   useEffect(() => {
@@ -39,7 +40,7 @@ const ExistingProject = () => {
         return;
       }
       await checkSubscription();
-      await loadFavoriteVendors();
+      // Removed loadFavoriteVendors() call from here
       await loadProject();
     };
 
@@ -65,32 +66,8 @@ const ExistingProject = () => {
     }
   };
 
-  const loadFavoriteVendors = async () => {
-    try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) return;
-
-      const { data: vendorData, error } = await supabase
-        .from('vendors')
-        .select('id, vendor_name, phone_number')
-        .eq('is_favorite', true);
-
-      if (!error && vendorData) {
-        const formattedVendors = vendorData.map((vendor: any) => ({
-          id: vendor.id,
-          vendorName: vendor.vendor_name,
-          phoneNumber: vendor.phone_number,
-          startDate: '',
-          jobDuration: '',
-          totalCost: '',
-          isFavorite: true
-        }));
-        setFavoriteVendors(formattedVendors);
-      }
-    } catch (error) {
-      console.error('Error loading favorite vendors:', error);
-    }
-  };
+  // Removed loadFavoriteVendors function as it's not needed on this page.
+  // The `isFavorite` status for each vendor is loaded with the project itself.
 
   const loadProject = async () => {
     try {
@@ -122,7 +99,7 @@ const ExistingProject = () => {
 
       const { data: vendorData, error: vendorError } = await supabase
         .from('vendors')
-        .select('*')
+        .select('*') // Select all columns, including is_favorite
         .eq('project_id', projectId)
         .order('created_at');
 
@@ -136,10 +113,11 @@ const ExistingProject = () => {
           startDate: vendor.start_date || '',
           jobDuration: vendor.job_duration || '',
           totalCost: vendor.total_cost ? `$${vendor.total_cost.toFixed(2)}` : '',
-          isFavorite: vendor.is_favorite || false
+          isFavorite: vendor.is_favorite || false // Ensure is_favorite is loaded
         }));
         setVendors(formattedVendors);
       } else {
+        // If no vendors, add an initial empty one
         addVendor();
       }
     } catch (error) {
@@ -157,7 +135,7 @@ const ExistingProject = () => {
     }
 
     const newVendor: VendorData = {
-      id: Date.now().toString(),
+      id: `new-${Date.now()}`, // Use a temporary ID for new vendors
       vendorName: '',
       phoneNumber: '',
       startDate: '',
@@ -169,24 +147,94 @@ const ExistingProject = () => {
   };
 
   const updateVendor = (id: string, field: keyof VendorData, value: string | boolean) => {
-    setVendors(vendors.map(vendor => 
+    setVendors(vendors.map(vendor =>
       vendor.id === id ? { ...vendor, [field]: value } : vendor
     ));
   };
 
-  const handleFavorite = (id: string) => {
-    setVendors(vendors.map(vendor => ({
-      ...vendor,
-      isFavorite: vendor.id === id ? !vendor.isFavorite : false
-    })));
+  const handleFavorite = async (id: string) => {
+    const vendorToUpdate = vendors.find(vendor => vendor.id === id);
+    if (!vendorToUpdate) return;
+
+    const newFavoriteStatus = !vendorToUpdate.isFavorite;
+
+    // Optimistically update UI
+    setVendors(vendors.map(vendor =>
+      vendor.id === id ? { ...vendor, isFavorite: newFavoriteStatus } : vendor
+    ));
+
+    // Persist to database
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        navigate('/login');
+        return;
+      }
+
+      // If it's a new vendor that hasn't been saved yet, we can't favorite it in DB immediately.
+      // It will be saved with its favorite status when saveProject is called.
+      if (vendorToUpdate.id.startsWith('new-')) {
+        showSuccess("Vendor will be favorited upon project save.");
+        return;
+      }
+
+      const { error } = await supabase
+        .from('vendors')
+        .update({ is_favorite: newFavoriteStatus })
+        .eq('id', id);
+
+      if (error) {
+        console.error('Error updating favorite status:', error);
+        showSuccess("Failed to update favorite status.");
+        // Revert UI if DB update fails
+        setVendors(vendors.map(vendor =>
+          vendor.id === id ? { ...vendor, isFavorite: !newFavoriteStatus } : vendor
+        ));
+      } else {
+        showSuccess(newFavoriteStatus ? "Vendor favorited!" : "Vendor unfavorited!");
+      }
+    } catch (error) {
+      console.error('Error updating favorite status:', error);
+      showSuccess("Failed to update favorite status.");
+      // Revert UI if error occurs
+      setVendors(vendors.map(vendor =>
+        vendor.id === id ? { ...vendor, isFavorite: !newFavoriteStatus } : vendor
+      ));
+    }
   };
 
-  const deleteVendor = (id: string) => {
+  const deleteVendor = async (id: string) => {
     if (vendors.length <= 1) {
       showSuccess("You must have at least one vendor card.");
       return;
     }
+
+    // Optimistically remove from UI
     setVendors(vendors.filter(vendor => vendor.id !== id));
+
+    // If it's an existing vendor (not a new one with temp ID), delete from DB
+    if (!id.startsWith('new-')) {
+      try {
+        const { error } = await supabase
+          .from('vendors')
+          .delete()
+          .eq('id', id);
+
+        if (error) {
+          console.error('Error deleting vendor from DB:', error);
+          showSuccess("Failed to delete vendor from database.");
+          // You might want to re-add the vendor to state if DB deletion fails
+          // For simplicity, we'll just log the error here.
+        } else {
+          showSuccess("Vendor deleted successfully!");
+        }
+      } catch (error) {
+        console.error('Error deleting vendor:', error);
+        showSuccess("Failed to delete vendor.");
+      }
+    } else {
+      showSuccess("Vendor card removed.");
+    }
   };
 
   const saveProject = async () => {
@@ -207,42 +255,41 @@ const ExistingProject = () => {
         return;
       }
 
+      // Update project name
       const { error: projectError } = await supabase
         .from('projects')
         .update({ name: projectName })
         .eq('id', project.id);
 
       if (projectError) {
-        showSuccess("Failed to update project");
+        showSuccess("Failed to update project name.");
         return;
       }
 
-      await supabase
+      // Prepare vendors for upsert (insert new, update existing)
+      const vendorsToUpsert = vendors.map(vendor => ({
+        id: vendor.id.startsWith('new-') ? undefined : vendor.id, // Supabase will generate ID for new rows
+        project_id: project.id,
+        vendor_name: vendor.vendorName || 'Unnamed Vendor',
+        phone_number: vendor.phoneNumber || null,
+        start_date: vendor.startDate || null,
+        job_duration: vendor.jobDuration || null,
+        total_cost: vendor.totalCost ? parseFloat(vendor.totalCost.replace(/[^0-9.]/g, '')) : null,
+        is_favorite: vendor.isFavorite || false // isFavorite status is now correctly passed
+      }));
+
+      // Use upsert to insert new vendors and update existing ones
+      const { error: vendorUpsertError } = await supabase
         .from('vendors')
-        .delete()
-        .eq('project_id', project.id);
+        .upsert(vendorsToUpsert, { onConflict: 'id' }); // Conflict on 'id' to update existing
 
-      const vendorsToSave = vendors.filter(v => v.vendorName || v.startDate || v.jobDuration || v.totalCost);
-      if (vendorsToSave.length > 0) {
-        const vendorInserts = vendorsToSave.map(vendor => ({
-          project_id: project.id,
-          vendor_name: vendor.vendorName || 'Unnamed Vendor',
-          phone_number: vendor.phoneNumber || null,
-          start_date: vendor.startDate || null,
-          job_duration: vendor.jobDuration || null,
-          total_cost: vendor.totalCost ? parseFloat(vendor.totalCost.replace(/[^0-9.]/g, '')) : null,
-          is_favorite: vendor.isFavorite || false
-        }));
-
-        const { error: vendorError } = await supabase
-          .from('vendors')
-          .insert(vendorInserts);
-
-        if (vendorError) {
-          console.error('Error saving vendors:', vendorError);
-        }
+      if (vendorUpsertError) {
+        console.error('Error saving vendors:', vendorUpsertError);
+        showSuccess("Failed to save vendor data.");
+        return;
       }
 
+      // Handle project shares (delete existing, then insert current)
       if (isSubscribed) {
         await supabase
           .from('project_shares')
@@ -304,10 +351,10 @@ const ExistingProject = () => {
   return (
     <Layout showLogoNavigation={false}>
       <SuccessCheckmark message={message} show={show} onComplete={hideSuccess} />
-      
+
       <div className="max-w-md mx-auto mt-8 pb-8">
         <BackButton />
-        
+
         <div className="text-center mb-8">
           <h1 className="text-2xl font-bold text-black mb-2">Edit Project</h1>
           <p className="text-gray-600">Modify your existing project</p>
@@ -335,16 +382,16 @@ const ExistingProject = () => {
 
           <div className="space-y-4">
             <h2 className="text-lg font-semibold text-black">Vendor Information</h2>
-            
+
             {vendors.map((vendor) => (
               <VendorCard
                 key={vendor.id}
                 vendor={vendor}
                 onUpdate={updateVendor}
                 onDelete={deleteVendor}
-                onFavorite={handleFavorite}
+                onFavorite={handleFavorite} // This now triggers DB update
                 canDelete={vendors.length > 1}
-                favoriteVendors={favoriteVendors}
+                // favoriteVendors prop is no longer needed here as isFavorite is on the vendor object itself
               />
             ))}
 
