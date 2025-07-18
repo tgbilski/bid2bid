@@ -40,11 +40,33 @@ const Login = () => {
           variant: "destructive",
         });
       } else if (data.user) {
+        // Increment sign-in count and get updated count
+        const { data: countResult } = await supabase.rpc('increment_sign_in_count', {
+          user_uuid: data.user.id
+        });
+        
+        // Check subscription status
+        const { data: subscriptionData } = await supabase.functions.invoke('check-subscription', {
+          headers: {
+            Authorization: `Bearer ${data.session.access_token}`,
+          },
+        });
+
         toast({
           title: "Welcome back!",
           description: "You have been signed in successfully.",
         });
-        navigate('/subscription');
+
+        // Smart routing: only show subscription page if not subscribed AND every 10th sign-in
+        const isSubscribed = subscriptionData?.subscribed || false;
+        const signInCount = countResult || 1;
+        const shouldShowSubscription = !isSubscribed && (signInCount % 10 === 0);
+
+        if (shouldShowSubscription) {
+          navigate('/subscription');
+        } else {
+          navigate('/home');
+        }
       }
     } catch (error) {
       toast({

@@ -76,12 +76,40 @@ export type Database = {
         }
         Relationships: []
       }
+      user_profiles: {
+        Row: {
+          created_at: string
+          id: string
+          last_sign_in_at: string | null
+          sign_in_count: number | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          last_sign_in_at?: string | null
+          sign_in_count?: number | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          last_sign_in_at?: string | null
+          sign_in_count?: number | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       vendors: {
         Row: {
           created_at: string
           id: string
           is_favorite: boolean | null
           job_duration: string | null
+          phone_number: string | null
           project_id: string
           start_date: string | null
           total_cost: number | null
@@ -93,6 +121,7 @@ export type Database = {
           id?: string
           is_favorite?: boolean | null
           job_duration?: string | null
+          phone_number?: string | null
           project_id: string
           start_date?: string | null
           total_cost?: number | null
@@ -104,6 +133,7 @@ export type Database = {
           id?: string
           is_favorite?: boolean | null
           job_duration?: string | null
+          phone_number?: string | null
           project_id?: string
           start_date?: string | null
           total_cost?: number | null
@@ -125,7 +155,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      increment_sign_in_count: {
+        Args: { user_uuid: string }
+        Returns: number
+      }
     }
     Enums: {
       [_ in never]: never
