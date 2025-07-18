@@ -52,11 +52,6 @@ const Login = () => {
           },
         });
 
-        toast({
-          title: "Welcome back!",
-          description: "You have been signed in successfully.",
-        });
-
         // Smart routing: only show subscription page if not subscribed AND every 10th sign-in
         const isSubscribed = subscriptionData?.subscribed || false;
         const signInCount = countResult || 1;
