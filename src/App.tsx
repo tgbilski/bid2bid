@@ -15,6 +15,7 @@ import MyProjects from "./pages/MyProjects";
 import MyFavorites from "./pages/MyFavorites";
 import Subscription from "./pages/Subscription";
 import ManageSubscription from "./pages/ManageSubscription";
+import EncryptionCompliance from "./pages/EncryptionCompliance";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -37,6 +38,7 @@ const App = () => (
           <Route path="/my-favorites" element={<MyFavorites />} />
           <Route path="/subscription" element={<Subscription />} />
           <Route path="/manage-subscription" element={<ManageSubscription />} />
+          <Route path="/encryption-compliance" element={<EncryptionCompliance />} />
           <Route path="*" element={<NotFound />} />
         </Routes>
       </BrowserRouter>
