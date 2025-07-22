@@ -6,8 +6,17 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Check, Crown } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import Layout from '@/components/Layout';
-import { InAppPurchase2 } from '@awesome-cordova-plugins/in-app-purchase-2';
 import { Capacitor } from '@capacitor/core';
+
+// Conditionally import IAP plugin only on native platforms
+let InAppPurchase2: any = null;
+if (Capacitor.isNativePlatform()) {
+  try {
+    InAppPurchase2 = require('@awesome-cordova-plugins/in-app-purchase-2').InAppPurchase2;
+  } catch (error) {
+    console.log('In-App Purchase plugin not available');
+  }
+}
 
 interface SubscriptionData {
   subscribed: boolean;
