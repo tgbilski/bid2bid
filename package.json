@@ -11,6 +11,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@awesome-cordova-plugins/core": "^8.0.2",
     "@awesome-cordova-plugins/in-app-purchase-2": "^8.0.2",
     "@capacitor/android": "^7.4.1",
     "@capacitor/cli": "^7.4.1",
