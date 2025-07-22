@@ -87,8 +87,8 @@ const NewProject = () => {
   };
 
   const addVendor = () => {
-    if (vendors.length >= 10) {
-      showSuccess("You can only add up to 10 vendor cards.");
+    if (!isSubscribed && vendors.length >= 10) {
+      showSuccess("Free users can only add up to 10 vendor cards. Upgrade to Premium for unlimited vendors.");
       return;
     }
 
@@ -254,7 +254,7 @@ const NewProject = () => {
               />
             ))}
 
-            {vendors.length < 10 && (
+            {(isSubscribed || vendors.length < 10) && (
               <Button
                 onClick={addVendor}
                 variant="outline"

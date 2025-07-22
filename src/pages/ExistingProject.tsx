@@ -167,10 +167,10 @@ const ExistingProject = () => {
         toast({ title: "Error", description: "Project not loaded yet.", variant: "destructive" });
         return;
     }
-    if (vendors.length >= 10) {
+    if (!isSubscribed && vendors.length >= 10) {
       toast({
         title: "Maximum Reached",
-        description: "You can only add up to 10 vendor cards.",
+        description: "Free users can only add up to 10 vendor cards. Upgrade to Premium for unlimited vendors.",
         variant: "destructive",
       });
       return;
@@ -500,7 +500,7 @@ const ExistingProject = () => {
                 ))
             )}
 
-            {vendors.length < 10 && (
+            {(isSubscribed || vendors.length < 10) && (
               <Button
                 onClick={addVendor}
                 variant="outline"
