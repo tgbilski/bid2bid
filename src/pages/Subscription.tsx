@@ -6,6 +6,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Check, Crown } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import Layout from '@/components/Layout';
+import { InAppPurchase2 } from '@awesome-cordova-plugins/in-app-purchase-2';
+import { Capacitor } from '@capacitor/core';
 
 interface SubscriptionData {
   subscribed: boolean;
@@ -19,7 +21,7 @@ const Subscription = () => {
   const navigate = useNavigate();
 
   // App Store product ID
-  const APP_STORE_PRODUCT_ID = 'io.bid2bid.app.premium.monthly';
+  const APP_STORE_PRODUCT_ID = 'io.bid2bid.app.premium.subscription';
 
   useEffect(() => {
     checkAuth();
@@ -61,16 +63,60 @@ const Subscription = () => {
   };
 
   const handleSubscribe = async () => {
-    // This will trigger the App Store subscription flow for the specific product ID
-    console.log(`Triggering App Store subscription for product: ${APP_STORE_PRODUCT_ID}`);
-    
-    // In a Capacitor app, you would use the In-App Purchase plugin here
-    // For now, this will redirect to App Store subscription management
-    // When implementing with Capacitor, you'll use:
-    // await Capacitor.Plugins.InAppPurchase2.order(APP_STORE_PRODUCT_ID);
-    
-    // For web testing, we'll just log the product ID
-    alert(`Subscription would be triggered for product: ${APP_STORE_PRODUCT_ID}`);
+    try {
+      console.log(`Triggering App Store subscription for product: ${APP_STORE_PRODUCT_ID}`);
+      
+      if (Capacitor.isNativePlatform()) {
+        // Initialize the In-App Purchase plugin
+        InAppPurchase2.verbosity = InAppPurchase2.DEBUG;
+        
+        // Register product and setup event handlers
+        InAppPurchase2.register({
+          id: APP_STORE_PRODUCT_ID,
+          type: InAppPurchase2.PAID_SUBSCRIPTION
+        });
+        
+        // Set up purchase events
+        InAppPurchase2.when(APP_STORE_PRODUCT_ID).approved((purchase: any) => {
+          console.log('Purchase approved:', purchase);
+          // Verify the purchase (implement verification on your backend)
+          purchase.verify();
+        });
+        
+        InAppPurchase2.when(APP_STORE_PRODUCT_ID).verified((purchase: any) => {
+          console.log('Purchase verified:', purchase);
+          // Finish the purchase and refresh subscription status
+          purchase.finish();
+          checkSubscription();
+        });
+        
+        InAppPurchase2.when(APP_STORE_PRODUCT_ID).error((error: any) => {
+          console.error('Purchase error:', error);
+          alert(`Purchase failed: ${error.message || 'Unknown error'}`);
+        });
+        
+        // Initialize and refresh
+        await InAppPurchase2.ready(() => {
+          console.log('In-App Purchase ready');
+          InAppPurchase2.refresh();
+        });
+        
+        // Get the product
+        const product = InAppPurchase2.get(APP_STORE_PRODUCT_ID);
+        if (product && product.state === InAppPurchase2.VALID) {
+          // Purchase the subscription
+          InAppPurchase2.order(APP_STORE_PRODUCT_ID);
+        } else {
+          throw new Error('Product not available for purchase');
+        }
+      } else {
+        // For web/development, show alert
+        alert(`In native app, this would trigger App Store subscription for product: ${APP_STORE_PRODUCT_ID}`);
+      }
+    } catch (error) {
+      console.error('Error during subscription purchase:', error);
+      alert(`Error: ${error instanceof Error ? error.message : 'Failed to process subscription'}`);
+    }
   };
 
   const handleContinue = () => {

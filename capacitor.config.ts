@@ -6,10 +6,16 @@ const config: CapacitorConfig = {
   appName: 'Bid2Bid',
   webDir: 'dist',
   server: {
-    url: 'app.bid2bid.io',
+    url: 'https://737599d9-a4e3-4b3e-a7d4-dc510c5dbfee.lovableproject.com?forceHideBadge=true',
     cleartext: true
   },
-  bundledWebRuntime: false
+  bundledWebRuntime: false,
+  plugins: {
+    InAppPurchase2: {
+      // Enable detailed logging for debugging
+      verbose: true
+    }
+  }
 };
 
 export default config;

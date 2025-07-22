@@ -28,7 +28,7 @@ serve(async (req) => {
     logStep("App Store webhook received", { notificationType: body.notification_type });
 
     // Expected App Store product ID
-    const EXPECTED_PRODUCT_ID = "io.bid2bid.app.premium.monthly";
+    const EXPECTED_PRODUCT_ID = "io.bid2bid.app.premium.subscription";
 
     // Handle different App Store notification types
     const notificationType = body.notification_type;
