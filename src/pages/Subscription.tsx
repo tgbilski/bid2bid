@@ -203,11 +203,11 @@ const Subscription = () => {
                 </div>
                 <div className="flex items-center gap-2">
                   <Check className="h-4 w-4 text-green-600" />
-                  <span className="text-sm">Unlimited vendor cards per project</span>
+                  <span className="text-sm">Priority customer support</span>
                 </div>
                 <div className="flex items-center gap-2">
                   <Check className="h-4 w-4 text-green-600" />
-                  <span className="text-sm">Priority customer support</span>
+                  <span className="text-sm">Advanced project management features</span>
                 </div>
               </div>
               <div className="text-xs text-gray-600 bg-gray-50 p-3 rounded">
