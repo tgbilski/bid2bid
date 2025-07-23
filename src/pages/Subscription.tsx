@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
@@ -6,17 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Check, Crown } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import Layout from '@/components/Layout';
-import { Capacitor } from '@capacitor/core';
-
-// Conditionally import IAP plugin only on native platforms
-let InAppPurchase2: any = null;
-if (Capacitor.isNativePlatform()) {
-  try {
-    InAppPurchase2 = require('@awesome-cordova-plugins/in-app-purchase-2').InAppPurchase2;
-  } catch (error) {
-    console.log('In-App Purchase plugin not available');
-  }
-}
+import { Purchases } from '@revenuecat/purchases-capacitor';
 
 interface SubscriptionData {
   subscribed: boolean;
@@ -27,13 +16,12 @@ interface SubscriptionData {
 const Subscription = () => {
   const [subscriptionData, setSubscriptionData] = useState<SubscriptionData>({ subscribed: false });
   const [isLoading, setIsLoading] = useState(true);
+  const [offerings, setOfferings] = useState<any>(null);
   const navigate = useNavigate();
-
-  // App Store product ID
-  const APP_STORE_PRODUCT_ID = 'io.bid2bid.app.premium.subscription';
 
   useEffect(() => {
     checkAuth();
+    loadOfferings();
   }, []);
 
   const checkAuth = async () => {
@@ -45,12 +33,32 @@ const Subscription = () => {
     await checkSubscription();
   };
 
+  const loadOfferings = async () => {
+    try {
+      const offeringsResult = await Purchases.getOfferings();
+      if (offeringsResult.current !== null) {
+        setOfferings(offeringsResult.current);
+        console.log('RevenueCat offerings loaded:', offeringsResult.current);
+      }
+    } catch (error) {
+      console.error('Error loading RevenueCat offerings:', error);
+    }
+  };
+
   const checkSubscription = async () => {
     try {
+      // First check RevenueCat customer info
+      const customerInfo = await Purchases.getCustomerInfo();
+      const activeEntitlements = (customerInfo as any).entitlements?.active || {};
+      const hasActiveSubscription = Object.keys(activeEntitlements).length > 0;
+      
+      console.log('RevenueCat customer info:', customerInfo);
+      console.log('Has active subscription:', hasActiveSubscription);
+
+      // Also check Supabase backend for additional data
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) return;
 
-      // Check subscription status from your backend
       const { data, error } = await supabase.functions.invoke('check-subscription', {
         headers: {
           Authorization: `Bearer ${session.access_token}`,
@@ -59,9 +67,14 @@ const Subscription = () => {
 
       if (!error && data) {
         setSubscriptionData({
-          subscribed: data.subscribed || false,
+          subscribed: hasActiveSubscription || data.subscribed || false,
           subscription_tier: data.subscription_tier,
           subscription_end: data.subscription_end,
+        });
+      } else {
+        // Fall back to RevenueCat data only
+        setSubscriptionData({
+          subscribed: hasActiveSubscription,
         });
       }
     } catch (error) {
@@ -73,63 +86,78 @@ const Subscription = () => {
 
   const handleSubscribe = async () => {
     try {
-      console.log(`Triggering App Store subscription for product: ${APP_STORE_PRODUCT_ID}`);
+      if (!offerings || !offerings.availablePackages || offerings.availablePackages.length === 0) {
+        alert('No subscription packages available. Please try again later.');
+        return;
+      }
+
+      // Get the first available package
+      const packageToPurchase = offerings.availablePackages[0];
       
-      if (Capacitor.isNativePlatform()) {
-        // Initialize the In-App Purchase plugin
-        InAppPurchase2.verbosity = InAppPurchase2.DEBUG;
-        
-        // Register product and setup event handlers
-        InAppPurchase2.register({
-          id: APP_STORE_PRODUCT_ID,
-          type: InAppPurchase2.PAID_SUBSCRIPTION
-        });
-        
-        // Set up purchase events
-        InAppPurchase2.when(APP_STORE_PRODUCT_ID).approved((purchase: any) => {
-          console.log('Purchase approved:', purchase);
-          // Verify the purchase (implement verification on your backend)
-          purchase.verify();
-        });
-        
-        InAppPurchase2.when(APP_STORE_PRODUCT_ID).verified((purchase: any) => {
-          console.log('Purchase verified:', purchase);
-          // Finish the purchase and refresh subscription status
-          purchase.finish();
-          checkSubscription();
-        });
-        
-        InAppPurchase2.when(APP_STORE_PRODUCT_ID).error((error: any) => {
-          console.error('Purchase error:', error);
-          alert(`Purchase failed: ${error.message || 'Unknown error'}`);
-        });
-        
-        // Initialize and refresh
-        await InAppPurchase2.ready(() => {
-          console.log('In-App Purchase ready');
-          InAppPurchase2.refresh();
-        });
-        
-        // Get the product
-        const product = InAppPurchase2.get(APP_STORE_PRODUCT_ID);
-        if (product && product.state === InAppPurchase2.VALID) {
-          // Purchase the subscription
-          InAppPurchase2.order(APP_STORE_PRODUCT_ID);
-        } else {
-          throw new Error('Product not available for purchase');
-        }
+      console.log('Purchasing package:', packageToPurchase);
+
+      // Make the purchase
+      const purchaseResult = await Purchases.purchasePackage({ aPackage: packageToPurchase });
+      const customerInfo = (purchaseResult as any).customerInfo;
+      
+      console.log('Purchase successful:', customerInfo);
+
+      // Check if the user now has active entitlements
+      const activeEntitlements = customerInfo?.entitlements?.active || {};
+      if (Object.keys(activeEntitlements).length > 0) {
+        console.log('Subscription activated successfully');
+        await checkSubscription(); // Refresh subscription status
       } else {
-        // For web/development, show alert
-        alert(`In native app, this would trigger App Store subscription for product: ${APP_STORE_PRODUCT_ID}`);
+        console.log('Purchase completed but no active entitlements found');
+      }
+
+    } catch (error: any) {
+      console.error('Error during purchase:', error);
+      
+      // Handle specific RevenueCat errors
+      if (error.code === 'PURCHASE_CANCELLED') {
+        console.log('Purchase was cancelled by user');
+        return;
+      }
+      
+      alert(`Purchase failed: ${error.message || 'Unknown error'}`);
+    }
+  };
+
+  const restorePurchases = async () => {
+    try {
+      const customerInfo = await Purchases.restorePurchases();
+      console.log('Purchases restored:', customerInfo);
+      
+      const activeEntitlements = (customerInfo as any).entitlements?.active || {};
+      if (Object.keys(activeEntitlements).length > 0) {
+        console.log('Active subscription found after restore');
+        await checkSubscription();
+      } else {
+        alert('No active subscriptions found to restore.');
       }
     } catch (error) {
-      console.error('Error during subscription purchase:', error);
-      alert(`Error: ${error instanceof Error ? error.message : 'Failed to process subscription'}`);
+      console.error('Error restoring purchases:', error);
+      alert('Failed to restore purchases. Please try again.');
     }
   };
 
   const handleContinue = () => {
     navigate('/home');
+  };
+
+  const getPackageInfo = () => {
+    if (!offerings || !offerings.availablePackages || offerings.availablePackages.length === 0) {
+      return null;
+    }
+    
+    const pkg = offerings.availablePackages[0];
+    return {
+      identifier: pkg.identifier,
+      productId: pkg.storeProduct?.identifier || pkg.product?.identifier,
+      price: pkg.storeProduct?.priceString || pkg.product?.priceString || 'N/A',
+      period: pkg.storeProduct?.subscriptionPeriod || pkg.product?.subscriptionPeriod || ''
+    };
   };
 
   if (isLoading) {
@@ -143,6 +171,8 @@ const Subscription = () => {
       </Layout>
     );
   }
+
+  const packageInfo = getPackageInfo();
 
   return (
     <Layout showLogoNavigation={false}>
@@ -166,7 +196,6 @@ const Subscription = () => {
             <CardContent className="space-y-4">
               <div className="text-sm text-green-700">
                 <p><strong>Plan:</strong> {subscriptionData.subscription_tier || 'Premium Monthly'}</p>
-                <p><strong>Product ID:</strong> {APP_STORE_PRODUCT_ID}</p>
                 {subscriptionData.subscription_end && (
                   <p><strong>Next billing:</strong> {new Date(subscriptionData.subscription_end).toLocaleDateString()}</p>
                 )}
@@ -178,8 +207,15 @@ const Subscription = () => {
                 >
                   Continue to App
                 </Button>
+                <Button
+                  onClick={restorePurchases}
+                  variant="outline"
+                  className="w-full"
+                >
+                  Restore Purchases
+                </Button>
                 <p className="text-xs text-center text-gray-600">
-                  To manage your subscription, go to your App Store settings
+                  Managed through RevenueCat and App Store
                 </p>
               </div>
             </CardContent>
@@ -192,7 +228,10 @@ const Subscription = () => {
                 Premium Features
               </CardTitle>
               <CardDescription>
-                Monthly subscription via App Store
+                {packageInfo 
+                  ? `${packageInfo.price} ${packageInfo.period}` 
+                  : 'Monthly subscription via App Store'
+                }
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
@@ -210,16 +249,32 @@ const Subscription = () => {
                   <span className="text-sm">Priority customer support</span>
                 </div>
               </div>
-              <div className="text-xs text-gray-600 bg-gray-50 p-3 rounded">
-                <p><strong>Product ID:</strong> {APP_STORE_PRODUCT_ID}</p>
-                <p>This subscription will be processed through Apple's App Store using the product ID configured in App Store Connect.</p>
-              </div>
+              
+              {packageInfo && (
+                <div className="text-xs text-gray-600 bg-gray-50 p-3 rounded">
+                  <p><strong>Package:</strong> {packageInfo.identifier}</p>
+                  <p><strong>Product:</strong> {packageInfo.productId}</p>
+                  <p>Managed by RevenueCat and processed through Apple's App Store</p>
+                </div>
+              )}
+              
               <div className="space-y-2">
                 <Button
                   onClick={handleSubscribe}
                   className="w-full bg-black text-white hover:bg-gray-800"
+                  disabled={!packageInfo}
                 >
-                  Subscribe via App Store
+                  {packageInfo 
+                    ? `Subscribe for ${packageInfo.price}`
+                    : 'Subscribe via App Store'
+                  }
+                </Button>
+                <Button
+                  onClick={restorePurchases}
+                  variant="outline"
+                  className="w-full"
+                >
+                  Restore Purchases
                 </Button>
                 <Button
                   onClick={handleContinue}
@@ -229,7 +284,7 @@ const Subscription = () => {
                   Continue with Free Version
                 </Button>
                 <p className="text-xs text-center text-gray-600">
-                  Subscription will be charged through your App Store account at the price set for your region
+                  Subscription will be charged through your App Store account
                 </p>
               </div>
             </CardContent>

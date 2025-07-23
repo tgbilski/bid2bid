@@ -6,6 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Crown, ArrowLeft, Settings, LogOut, Trash2 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import Layout from '@/components/Layout';
+import { Purchases } from '@revenuecat/purchases-capacitor';
 
 interface SubscriptionData {
   subscribed: boolean;
@@ -33,6 +34,15 @@ const ManageSubscription = () => {
 
   const checkSubscription = async () => {
     try {
+      // First check RevenueCat customer info
+      const customerInfo = await Purchases.getCustomerInfo();
+      const activeEntitlements = (customerInfo as any).entitlements?.active || {};
+      const hasActiveSubscription = Object.keys(activeEntitlements).length > 0;
+      
+      console.log('RevenueCat customer info:', customerInfo);
+      console.log('Has active subscription:', hasActiveSubscription);
+
+      // Also check Supabase backend for additional data
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) return;
 
@@ -44,9 +54,14 @@ const ManageSubscription = () => {
 
       if (!error && data) {
         setSubscriptionData({
-          subscribed: data.subscribed || false,
+          subscribed: hasActiveSubscription || data.subscribed || false,
           subscription_tier: data.subscription_tier,
           subscription_end: data.subscription_end,
+        });
+      } else {
+        // Fall back to RevenueCat data only
+        setSubscriptionData({
+          subscribed: hasActiveSubscription,
         });
       }
     } catch (error) {
@@ -56,10 +71,36 @@ const ManageSubscription = () => {
     }
   };
 
-  const openAppStoreSettings = () => {
-    // This will open the App Store subscription management
-    console.log('Opening App Store subscription settings...');
-    // TODO: Implement App Store settings navigation
+  const openAppStoreSettings = async () => {
+    try {
+      // Try to open subscription management with RevenueCat
+      console.log('Opening subscription management...');
+      
+      // For iOS, this would typically open App Store settings
+      // RevenueCat doesn't have a direct method for this, so we'll show instructions
+      alert('To manage your subscription:\n\n1. Open Settings on your device\n2. Tap your Apple ID at the top\n3. Tap "Subscriptions"\n4. Find your bid2bid subscription\n5. Manage or cancel as needed');
+    } catch (error) {
+      console.error('Error opening subscription settings:', error);
+    }
+  };
+
+  const restorePurchases = async () => {
+    try {
+      const customerInfo = await Purchases.restorePurchases();
+      console.log('Purchases restored:', customerInfo);
+      
+      const activeEntitlements = (customerInfo as any).entitlements?.active || {};
+      if (Object.keys(activeEntitlements).length > 0) {
+        console.log('Active subscription found after restore');
+        await checkSubscription();
+        alert('Subscription restored successfully!');
+      } else {
+        alert('No active subscriptions found to restore.');
+      }
+    } catch (error) {
+      console.error('Error restoring purchases:', error);
+      alert('Failed to restore purchases. Please try again.');
+    }
   };
 
   const handleSubscribe = () => {
@@ -181,6 +222,13 @@ const ManageSubscription = () => {
                 >
                   <Settings className="h-4 w-4" />
                   Manage in App Store
+                </Button>
+                <Button
+                  onClick={restorePurchases}
+                  variant="outline"
+                  className="w-full"
+                >
+                  Restore Purchases
                 </Button>
                 <p className="text-xs text-center text-gray-600">
                   To cancel or modify your subscription, use your App Store settings
